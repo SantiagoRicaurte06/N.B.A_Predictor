@@ -1,0 +1,33 @@
+# === Datos, cache y secretos ===
+# La carpeta cache contiene la API key, el bankroll, el historial de
+# apuestas y los gamelogs descargados. NADA de esto debe subirse.
+cache/
+config.json
+
+# === Python ===
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# === Entornos virtuales ===
+venv/
+.venv/
+env/
+ENV/
+
+# === Herramientas / IDE ===
+.claude/
+.vscode/
+.idea/
+*.swp
+
+# === Streamlit ===
+.streamlit/secrets.toml
+
+# === Sistema operativo ===
+.DS_Store
+Thumbs.db
