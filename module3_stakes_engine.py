@@ -24,7 +24,7 @@ PARAMS = {
     'min_bet_usd':    2.0,    # Apuesta mínima en USD
     'confianza_mult': {'ALTA': 1.0, 'MEDIA': 0.50, 'BAJA': 0.25},
     'mercados_activos': ['PTS'],   # v1 PTS-only (ADR-001)
-    'bankroll_inicial': 300.0,
+    'bankroll_inicial': 1000.0,
 }
 
 # Alias de compatibilidad para el resto del módulo (leen de PARAMS).

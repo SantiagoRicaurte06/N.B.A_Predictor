@@ -27,7 +27,7 @@ from nba_api.stats.static import players as nba_players_static
 # CONFIGURACIÓN GLOBAL
 # ─────────────────────────────────────────────
 
-TEMPORADA        = "2025-26"
+TEMPORADA        = "2026-27"
 CACHE_DIR        = Path("cache")
 CACHE_DIR.mkdir(exist_ok=True)
 
