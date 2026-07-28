@@ -181,9 +181,12 @@ def analizar_pick_prop(prediccion_resultado: dict,
     # El MAE subestima la varianza real, multiplicar por 1.25 para aproximar STD
     from scipy.stats import norm
 
-    # Sigma basado en STD histórica (del modelo) con floor de 3.0 para props
-    std_historico = prediccion_resultado.get('std_historico', mae * 1.25)
-    sigma = max(std_historico, 3.0)  # Mínimo 3 puntos de desviación
+    # Sigma: preferir pred_sigma del contrato (modelo pooled, ADR-008); si no,
+    # caer a std_historico o a una aproximación desde el MAE. Floor de 3.0.
+    sigma_fuente = (prediccion_resultado.get('pred_sigma')
+                    or prediccion_resultado.get('std_historico')
+                    or (mae * 1.25))
+    sigma = max(float(sigma_fuente), 3.0)  # Mínimo 3 puntos de desviación
 
     # Calcular distancia a la línea en unidades de sigma
     z_score = (prediccion - linea_casa) / sigma
