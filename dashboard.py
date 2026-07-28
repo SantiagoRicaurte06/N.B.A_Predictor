@@ -22,9 +22,7 @@ from module3_stakes_engine import (
 )
 from module5_error_analysis import (
     ejecutar_analisis_completo,
-    cargar_correcciones_activas,
     PATRONES_FILE,
-    MEJORAS_FILE
 )
 from module6_odds_engine import (
     get_odds_props,
@@ -672,39 +670,18 @@ with tab_bankroll:
 # ════════════════════════════════════════════
 
 with tab_analisis:
-    st.markdown("### 🔍 Análisis de Errores y Aprendizaje")
-    st.caption("El sistema analiza dónde falla y aplica correcciones automáticas.")
-
-    
-    from module5_error_analysis import cargar_correcciones_activas, PATRONES_FILE, MEJORAS_FILE
-    correcciones = cargar_correcciones_activas()
-
-    if correcciones:
-        st.markdown("#### ⚡ Correcciones activas ahora mismo")
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            bias = correcciones.get('bias_correction', 0)
-            st.metric("Corrección de sesgo", f"{bias:+.1f} pts" if bias else "Ninguna")
-        with col2:
-            gtd_k = correcciones.get('gtd_kelly_fraction', 0.25)
-            st.metric("Kelly GTD", f"{gtd_k*100:.0f}%")
-        with col3:
-            excluidos = correcciones.get('jugadores_excluidos', [])
-            st.metric("Jugadores excluidos", len(excluidos))
-
-        if excluidos:
-            st.warning(f"⛔ Excluidos por bajo rendimiento: {', '.join(excluidos)}")
-
-    st.markdown("---")
+    st.markdown("### 🔍 Diagnóstico de Errores")
+    st.caption("Solo lectura: muestra dónde falla el modelo. NO aplica cambios "
+               "automáticos — las decisiones se toman con evidencia de backtest (ADR-004).")
 
     # Ejecutar análisis
-    if st.button("🔍 Ejecutar Análisis Completo", use_container_width=True):
-        with st.spinner("Analizando historial de apuestas..."):
+    if st.button("🔍 Ejecutar Diagnóstico", use_container_width=True):
+        with st.spinner("Analizando picks resueltos del ledger..."):
             try:
                 resultado = ejecutar_analisis_completo()
                 if resultado:
                     st.session_state['ultimo_analisis'] = resultado
-                    st.success("✅ Análisis completado")
+                    st.success("✅ Diagnóstico completado")
                     st.rerun()
                 else:
                     st.warning("Necesitas al menos 10 picks con resultado registrado para analizar.")
@@ -716,7 +693,6 @@ with tab_analisis:
         analisis = st.session_state['ultimo_analisis']
         patrones = analisis.get('patrones', {})
         problemas = analisis.get('problemas', [])
-        mejoras = analisis.get('mejoras', {})
 
         # Resumen
         resumen = patrones.get('resumen', {})
@@ -756,34 +732,21 @@ with tab_analisis:
             for jugador, stats in jugadores_prob.items():
                 st.error(f"**{jugador}** — {stats['win_rate']}% en {stats['n_picks']} picks")
 
-        # Problemas detectados
+        # Problemas detectados (informativos — no se aplican solos)
         if problemas:
             st.markdown(f"#### 🚨 {len(problemas)} problemas detectados")
+            st.caption("Sugerencias para revisar con backtest. El sistema NO las aplica automáticamente.")
             for p in problemas:
                 emoji = "🔴" if p['severidad'] == 'ALTA' else "🟡"
                 with st.expander(f"{emoji} {p['descripcion']}"):
-                    st.markdown(f"**Acción recomendada:** {p['accion']}")
+                    st.markdown(f"**Sugerencia (revisar con backtest):** {p['accion']}")
                     if p.get('feature_sugerida'):
                         st.code(f"Feature sugerida: {p['feature_sugerida']}")
-
-        # Mejoras aplicadas
-        aplicadas = mejoras.get('aplicadas', [])
-        if aplicadas:
-            st.markdown(f"#### ✅ {len(aplicadas)} mejoras aplicadas automáticamente")
-            for m in aplicadas:
-                st.success(m['descripcion'])
-
-        # Pendientes
-        pendientes = mejoras.get('pendientes', [])
-        if pendientes:
-            st.markdown(f"#### 🕐 {len(pendientes)} mejoras pendientes de reentrenamiento")
-            for p in pendientes:
-                st.info(p['descripcion'])
 
         # Reporte completo
         with st.expander("📄 Ver reporte completo en texto"):
             st.text(analisis.get('reporte', ''))
 
-    elif not correcciones:
-        st.info("👆 Ejecuta el análisis cuando tengas al menos 10 picks con resultado registrado. "
-                "El sistema identificará patrones de fallo y aplicará correcciones automáticamente.")
+    else:
+        st.info("👆 Ejecuta el diagnóstico cuando tengas al menos 10 picks con resultado registrado. "
+                "Identificará patrones de fallo para que decidas con evidencia (no aplica cambios solo).")

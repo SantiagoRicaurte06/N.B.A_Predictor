@@ -30,8 +30,8 @@ CONFIANZA_MULT   = {      # Multiplicador de stake según confianza del modelo
     'BAJA':  0.25          # Reducido de 0.50 por mal rendimiento
 }
 
-# Mercados suspendidos temporalmente por bajo rendimiento
-MERCADOS_SUSPENDIDOS = ['AST', 'REB']  # Win rate < 35%
+# (ELIMINADO) MERCADOS_SUSPENDIDOS — lo poblaba el lazo de auto-mejora (ADR-004).
+# v1 es PTS-only (ADR-001), así que no hay mercados que suspender.
 
 # ─────────────────────────────────────────────
 # 1. BANKROLL — Persistencia local
@@ -210,11 +210,7 @@ def analizar_pick_prop(prediccion_resultado: dict,
     target     = prediccion_resultado.get('target', 'PTS')
     avg_historico = prediccion_resultado.get('avg_historico', prediccion)
 
-    # ── FILTRO 1: Mercados suspendidos ──
-    if target in MERCADOS_SUSPENDIDOS:
-        return None  # No apostar en mercados con mal rendimiento
-
-    # ── FILTRO 2: Predicciones absurdas ──
+    # ── FILTRO: Predicciones absurdas ──
     es_valida, razon = validar_prediccion(prediccion, target, avg_historico)
     if not es_valida:
         print(f"  ⚠️  Predicción filtrada: {razon}")

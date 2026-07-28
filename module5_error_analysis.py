@@ -13,17 +13,18 @@ import json
 from pathlib import Path
 from datetime import datetime, timedelta
 
-HISTORIAL_FILE   = Path("cache/historial_apuestas.csv")
 PATRONES_FILE    = Path("cache/patrones_error.json")
-MEJORAS_FILE     = Path("cache/mejoras_aplicadas.json")
 REPORTE_DIR      = Path("cache/reportes")
 REPORTE_DIR.mkdir(parents=True, exist_ok=True)
 
 # Mínimo de picks para analizar un patrón con confianza
 MIN_MUESTRA = 10
 
-# Mercados suspendidos temporalmente (se actualiza dinámicamente)
-MERCADOS_SUSPENDIDOS = ['AST', 'REB']  # Win rate < 35%
+# NOTA (ADR-004): este módulo es SOLO DIAGNÓSTICO. Muestra dónde falla el
+# modelo pero NO aplica cambios automáticos. El lazo de auto-mejora que
+# suspendía mercados / excluía jugadores con muestras diminutas se eliminó
+# porque reaccionaba al ruido como si fuera señal. Las decisiones se toman
+# con evidencia de backtest y muestras grandes.
 
 # ─────────────────────────────────────────────
 # 1. CARGAR Y VALIDAR HISTORIAL
@@ -31,36 +32,46 @@ MERCADOS_SUSPENDIDOS = ['AST', 'REB']  # Win rate < 35%
 
 def cargar_historial() -> pd.DataFrame | None:
     """
-    Carga el historial de apuestas con resultados registrados.
-    Solo analiza picks que ya tienen resultado (W o L).
+    Carga los picks resueltos desde el ledger de module8 (fuente única de
+    verdad, ADR-007) y los mapea al formato que esperan los analizadores.
+    Solo considera picks con resultado W o L (VOID se excluye del análisis).
     """
-    if not HISTORIAL_FILE.exists():
-        print("  ⚠️  Sin historial de apuestas todavía.")
+    import module8_tracking as trk
+
+    ledger = trk._cargar_ledger()
+    if ledger.empty:
+        print("  ⚠️  Ledger vacío — aún no hay picks registrados.")
         return None
 
-    df = pd.read_csv(HISTORIAL_FILE)
-
-    # Solo picks con resultado
-    df_resultado = df.dropna(subset=['resultado'])
-    df_resultado = df_resultado[
-        df_resultado['resultado'].isin(['W', 'L'])
-    ].copy()
+    df_resultado = ledger[ledger['resultado'].isin(['W', 'L'])].copy()
 
     if len(df_resultado) < MIN_MUESTRA:
         print(f"  ⚠️  Solo {len(df_resultado)} picks con resultado. "
               f"Necesitas al menos {MIN_MUESTRA} para analizar patrones.")
         return None
 
-    # Columnas útiles
+    # Mapear columnas del ledger → nombres que usan los analizadores.
+    df_resultado = df_resultado.rename(columns={
+        'pred_media': 'prediccion_modelo',
+        'stake':      'stake_usd',
+        'target':     'mercado',
+        'fecha':      'timestamp',
+        'pnl':        'ganancia_potencial',
+    })
+
+    # Columnas derivadas
     df_resultado['ganado'] = (df_resultado['resultado'] == 'W').astype(int)
     df_resultado['error_abs'] = abs(
-        df_resultado['prediccion_modelo'] - df_resultado['linea']
+        pd.to_numeric(df_resultado['prediccion_modelo'], errors='coerce') -
+        pd.to_numeric(df_resultado['linea'], errors='coerce')
     )
     df_resultado['timestamp'] = pd.to_datetime(
         df_resultado['timestamp'], errors='coerce'
     )
 
-    print(f"  ✅ {len(df_resultado)} picks con resultado cargados")
+    # NOTA: 'confianza' y 'es_gtd' ya no existen en el ledger v1; los
+    # analizadores que dependen de ellas retornan {} de forma segura.
+    print(f"  ✅ {len(df_resultado)} picks con resultado cargados desde el ledger")
     return df_resultado
 
 
@@ -367,135 +378,23 @@ def identificar_problemas(patrones: dict) -> list[dict]:
 
 
 # ─────────────────────────────────────────────
-# 4. APLICAR MEJORAS AUTOMÁTICAS
+# 4. (ELIMINADO) Auto-mejora — ADR-004
 # ─────────────────────────────────────────────
-
-def aplicar_mejoras_automaticas(problemas: list[dict]) -> dict:
-    """
-    Aplica las mejoras que no requieren reentrenar el modelo.
-    Las que requieren reentrenamiento se guardan como pendientes.
-    """
-    mejoras_aplicadas  = []
-    mejoras_pendientes = []
-
-    # Cargar mejoras previas
-    if MEJORAS_FILE.exists():
-        with open(MEJORAS_FILE, 'r') as f:
-            historial_mejoras = json.load(f)
-    else:
-        historial_mejoras = []
-
-    # Mejoras que se pueden aplicar directamente
-    mejoras_directas = {
-        'bias_correction',
-        'gtd_kelly_reduction',
-        'gtd_kelly_reduction',
-    }
-
-    correcciones = {}
-
-    for problema in problemas:
-        feature = problema.get('feature_sugerida')
-        tipo    = problema.get('tipo')
-
-        # ── Corrección de sesgo — se aplica directo
-        if tipo == 'sesgo_sobreestima' or tipo == 'sesgo_subestima':
-            valor = problema.get('valor', 0)
-            correcciones['bias_correction'] = valor
-            mejoras_aplicadas.append({
-                'tipo':        'bias_correction',
-                'descripcion': f"Corrección de sesgo: {valor:+.2f} pts a todas las predicciones",
-                'fecha':       datetime.now().isoformat()
-            })
-
-        # ── GTD Kelly reduction — se aplica directo
-        elif tipo == 'gtd_poco_confiable':
-            correcciones['gtd_kelly_fraction'] = 0.10
-            mejoras_aplicadas.append({
-                'tipo':        'gtd_kelly_reduction',
-                'descripcion': 'Kelly reducido al 10% para picks GTD',
-                'fecha':       datetime.now().isoformat()
-            })
-
-        # ── Jugador problemático — excluir de picks
-        elif tipo == 'jugador_problematico':
-            jugador = problema.get('jugador', '')
-            if 'jugadores_excluidos' not in correcciones:
-                correcciones['jugadores_excluidos'] = []
-            correcciones['jugadores_excluidos'].append(jugador)
-            mejoras_aplicadas.append({
-                'tipo':        'jugador_excluido',
-                'descripcion': f"{jugador} excluido por bajo rendimiento",
-                'fecha':       datetime.now().isoformat()
-            })
-
-        # ── Mercado con bajo rendimiento
-        elif tipo == 'mercado_bajo_rendimiento':
-            mercado = problema.get('descripcion', '').split()[0]
-            if 'mercados_edge_minimo' not in correcciones:
-                correcciones['mercados_edge_minimo'] = {}
-            correcciones['mercados_edge_minimo'][mercado] = 8.0
-            mejoras_aplicadas.append({
-                'tipo':        'edge_minimo_aumentado',
-                'descripcion': f"Edge mínimo aumentado a 8% para {mercado}",
-                'fecha':       datetime.now().isoformat()
-            })
-
-        # ── Mejoras que requieren reentrenamiento
-        elif feature in ['calibracion_isotonica', 'recalibrar_confianza',
-                          'ventana_datos_reducida']:
-            mejoras_pendientes.append({
-                'tipo':        feature,
-                'descripcion': problema['accion'],
-                'severidad':   problema['severidad'],
-                'fecha':       datetime.now().isoformat()
-            })
-
-    # Guardar correcciones activas
-    correcciones['ultima_actualizacion'] = datetime.now().isoformat()
-
-    with open(MEJORAS_FILE, 'w') as f:
-        json.dump({
-            'correcciones_activas': correcciones,
-            'historial': historial_mejoras + mejoras_aplicadas,
-            'pendientes': mejoras_pendientes
-        }, f, indent=2)
-
-    return {
-        'correcciones': correcciones,
-        'aplicadas':    mejoras_aplicadas,
-        'pendientes':   mejoras_pendientes
-    }
-
-
-def cargar_correcciones_activas() -> dict:
-    """
-    Carga las correcciones activas para que el módulo 3 las aplique.
-    """
-    if not MEJORAS_FILE.exists():
-        return {}
-
-    try:
-        with open(MEJORAS_FILE, 'r') as f:
-            contenido = f.read().strip()
-            if not contenido:  # archivo vacío
-                return {}
-            data = json.loads(contenido)
-            return data.get('correcciones_activas', {})
-    except json.JSONDecodeError:
-        # Archivo corrupto — resetear
-        MEJORAS_FILE.unlink()
-        return {}
+# El lazo `aplicar_mejoras_automaticas()` y `cargar_correcciones_activas()`
+# se eliminaron. Suspendían mercados / excluían jugadores / metían
+# correcciones de sesgo con muestras de solo 10 picks, reaccionando al ruido
+# como si fuera señal. `identificar_problemas()` (arriba) se conserva como
+# diagnóstico puro: informa, no muta nada.
 
 
 # ─────────────────────────────────────────────
-# 5. REPORTE SEMANAL
+# 5. REPORTE
 # ─────────────────────────────────────────────
 
-def generar_reporte(patrones: dict, problemas: list[dict],
-                     mejoras: dict) -> str:
+def generar_reporte(patrones: dict, problemas: list[dict]) -> str:
     """
-    Genera un reporte legible con el análisis completo.
+    Genera un reporte legible con el diagnóstico. NO aplica cambios (ADR-004):
+    lista los problemas detectados para que el humano decida con evidencia.
     Se guarda en cache/reportes/ con fecha.
     """
     fecha = datetime.now().strftime('%Y-%m-%d')
@@ -533,29 +432,15 @@ def generar_reporte(patrones: dict, problemas: list[dict],
     else:
         lineas.append("  ✅ Sin jugadores problemáticos detectados")
 
-    # Problemas detectados
+    # Problemas detectados (diagnóstico — acción manual, no automática)
     lineas.append(f"\n  ── {len(problemas)} PROBLEMAS DETECTADOS ──────────────────")
     for i, p in enumerate(problemas, 1):
         emoji = "🔴" if p['severidad'] == 'ALTA' else "🟡"
         lineas.append(f"  {emoji} {i}. {p['descripcion']}")
-        lineas.append(f"      → {p['accion']}")
+        lineas.append(f"      → sugerencia (revisar con backtest): {p['accion']}")
 
-    # Mejoras aplicadas
-    aplicadas = mejoras.get('aplicadas', [])
-    lineas.append(f"\n  ── {len(aplicadas)} MEJORAS APLICADAS AUTOMÁTICAMENTE ────")
-    if aplicadas:
-        for m in aplicadas:
-            lineas.append(f"  ✅ {m['descripcion']}")
-    else:
-        lineas.append("  Sin mejoras automáticas aplicadas")
-
-    # Mejoras pendientes
-    pendientes = mejoras.get('pendientes', [])
-    if pendientes:
-        lineas.append(f"\n  ── {len(pendientes)} MEJORAS PENDIENTES (requieren reentrenamiento) ──")
-        for p in pendientes:
-            emoji = "🔴" if p['severidad'] == 'ALTA' else "🟡"
-            lineas.append(f"  {emoji} {p['descripcion']}")
+    lineas.append("\n  ℹ️  Diagnóstico solo-lectura: estas sugerencias NO se aplican")
+    lineas.append("     automáticamente. Decidir con evidencia de backtest.")
 
     lineas.append("\n" + "=" * 60)
 
@@ -578,12 +463,11 @@ def generar_reporte(patrones: dict, problemas: list[dict],
 
 def ejecutar_analisis_completo() -> dict:
     """
-    Pipeline completo del módulo de análisis de errores.
-    1. Carga historial
+    Pipeline de diagnóstico (ADR-004: solo lectura, no aplica cambios).
+    1. Carga picks resueltos desde el ledger
     2. Detecta patrones
-    3. Identifica problemas
-    4. Aplica mejoras automáticas
-    5. Genera reporte
+    3. Identifica problemas (informativos)
+    4. Genera reporte
     """
     print("\n" + "=" * 55)
     print("  🔍 MÓDULO 5: ERROR ANALYSIS ENGINE")
@@ -629,26 +513,18 @@ def ejecutar_analisis_completo() -> dict:
     with open(PATRONES_FILE, 'w') as f:
         json.dump(patrones, f, indent=2, default=str)
 
-    # Identificar problemas
+    # Identificar problemas (diagnóstico puro — no se aplica nada, ADR-004)
     print("  → Identificando problemas sistemáticos...")
     problemas = identificar_problemas(patrones)
-    print(f"  ⚠️  {len(problemas)} problemas detectados")
-
-    # Aplicar mejoras automáticas
-    print("  → Aplicando mejoras automáticas...")
-    mejoras = aplicar_mejoras_automaticas(problemas)
-    print(f"  ✅ {len(mejoras['aplicadas'])} mejoras aplicadas")
-    if mejoras['pendientes']:
-        print(f"  🕐 {len(mejoras['pendientes'])} mejoras pendientes de reentrenamiento")
+    print(f"  ⚠️  {len(problemas)} problemas detectados (solo informativos)")
 
     # Generar reporte
     print("\n  → Generando reporte...")
-    reporte = generar_reporte(patrones, problemas, mejoras)
+    reporte = generar_reporte(patrones, problemas)
 
     return {
         'patrones':  patrones,
         'problemas': problemas,
-        'mejoras':   mejoras,
         'reporte':   reporte
     }
 
