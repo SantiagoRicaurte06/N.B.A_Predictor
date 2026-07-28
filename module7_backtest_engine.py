@@ -85,6 +85,100 @@ def _cutoff_validacion(gamelogs: dict) -> pd.Timestamp | None:
 
 
 # ─────────────────────────────────────────────
+# 1b. SPLIT TEMPORAL COMPARTIDO (para comparar modelos)
+# ─────────────────────────────────────────────
+# Para comparar baseline vs pooled de forma JUSTA, ambos se evalúan sobre los
+# MISMOS puntos de test. Definimos una ventana temporal dentro de 2025-26:
+#   TRAIN      : fecha <  T1   (para el pooled)
+#   TEST (dev) : T1 <= fecha < T2   ← aquí se comparan los modelos
+#   VALIDACIÓN : fecha >= T2 (= VALIDACION_DESDE_PCT, intocable)
+
+TEST_DESDE_PCT = 0.55   # T1: inicio de la ventana de test/dev
+
+
+def fechas_corte(gamelogs: dict) -> tuple:
+    """Retorna (T1, T2): inicio de test y inicio de validación (2025-26)."""
+    fechas = [gl['GAME_DATE'] for k, gl in gamelogs.items() if k.endswith('2025-26')]
+    if not fechas:
+        return None, None
+    todas = pd.concat(fechas).sort_values()
+    return todas.quantile(TEST_DESDE_PCT), todas.quantile(VALIDACION_DESDE_PCT)
+
+
+def construir_test_set(gamelogs: dict, t1, t2,
+                       max_por_jugador: int | None = 4,
+                       min_historia: int = MIN_HISTORIA) -> list:
+    """
+    Puntos de test compartidos: partidos de 2025-26 con fecha en [T1, T2),
+    con al menos `min_historia` de historia previa. Capea por jugador para
+    acotar el costo del baseline (que reentrena por punto). Retorna (key, i).
+    """
+    test_set = []
+    for key, gl in gamelogs.items():
+        if not key.endswith('2025-26'):
+            continue
+        candidatos = [i for i in range(min_historia, len(gl))
+                      if t1 <= gl.iloc[i]['GAME_DATE'] < t2]
+        if max_por_jugador is not None:
+            candidatos = candidatos[-max_por_jugador:]
+        for i in candidatos:
+            test_set.append((key, i))
+    return test_set
+
+
+def evaluar(predict_for, test_set: list, gamelogs: dict,
+            verbose: bool = True, etiqueta: str = "") -> dict:
+    """
+    Evalúa un `predict_for(key, i, historia) -> (media, sigma) | None` sobre un
+    test_set fijo. Reusa la línea sintética y las métricas del backtest, para
+    que baseline y pooled sean 100% comparables.
+    """
+    filas = []
+    jugadores = set()
+    for key, i in test_set:
+        gl = gamelogs[key]
+        fecha_F = gl.iloc[i]['GAME_DATE']
+        historia = gl.iloc[:i]
+
+        # Anti-leakage (assert duro, TRD §5.1)
+        assert historia['GAME_DATE'].max() < fecha_F, f"LEAKAGE en {key} idx {i}"
+
+        actual = pd.to_numeric(gl['PTS'], errors='coerce').iloc[i]
+        if not np.isfinite(actual):
+            continue
+
+        linea = linea_sintetica(pd.to_numeric(historia['PTS'], errors='coerce'))
+        pred = predict_for(key, i, historia)
+        if pred is None:
+            continue
+        media, sigma = pred
+        if sigma <= 0 or abs(media - linea) < 1e-9:
+            continue
+
+        lado = 'OVER' if media > linea else 'UNDER'
+        z = (media - linea) / sigma
+        prob = float(norm.cdf(z)) if lado == 'OVER' else float(norm.cdf(-z))
+        edge = prob * ODDS_PROXY - 1
+        gano = (actual > linea) if lado == 'OVER' else (actual < linea)
+
+        filas.append({
+            'key': key, 'actual': float(actual), 'pred': media, 'sigma': sigma,
+            'linea': linea, 'lado': lado, 'prob': prob, 'edge': edge,
+            'gano': bool(gano), 'error': media - float(actual),
+        })
+        jugadores.add(key)
+
+    if not filas:
+        return {"error": "Sin predicciones en el test_set."}
+
+    df = pd.DataFrame(filas)
+    resumen = _resumen_metricas(df, len(jugadores), etiqueta or "test-set")
+    if verbose:
+        _imprimir_resumen(resumen)
+    return {"df": df, "resumen": resumen}
+
+
+# ─────────────────────────────────────────────
 # 2. LÍNEA SINTÉTICA (PROXY)
 # ─────────────────────────────────────────────
 

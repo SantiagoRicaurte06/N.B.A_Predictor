@@ -15,7 +15,7 @@ import sys
 sys.path.append(str(Path(__file__).parent))
 
 from module1_data_engine import cargar_todos_los_datos
-from module2_prediction_engine import generar_predicciones
+from module9_pooled_model import generar_predicciones_pooled
 from module3_stakes_engine import (
     generar_stakes, cargar_bankroll,
     calcular_estadisticas_historial, PARAMS,
@@ -233,15 +233,19 @@ with tab_picks:
 
     if st.session_state.datos_cargados is None:
         if st.button("🚀 Cargar datos NBA y generar predicciones", use_container_width=True):
-            with st.spinner("Descargando datos de la NBA... (puede tardar 2-3 min)"):
+            with st.spinner("Descargando datos NBA y entrenando modelo pooled... (2-3 min)"):
                 try:
                     datos = cargar_todos_los_datos()
                     st.session_state.datos_cargados = datos
 
-                    predicciones = generar_predicciones(datos)
+                    # Modelo pooled (ADR-002): entrena una vez y se reutiliza.
+                    predicciones, modelo = generar_predicciones_pooled(
+                        datos, st.session_state.get('modelo_pooled')
+                    )
+                    st.session_state['modelo_pooled'] = modelo
                     st.session_state.predicciones = predicciones
 
-                    st.success(f"✅ {len(predicciones)} predicciones generadas")
+                    st.success(f"✅ {len(predicciones)} predicciones generadas (modelo pooled)")
                     st.rerun()
                 except Exception as e:
                     st.error(f"Error cargando datos: {e}")
