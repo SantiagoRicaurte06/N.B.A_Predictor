@@ -203,10 +203,11 @@ st.markdown("---")
 # ─────────────────────────────────────────────
 
 # Totales & Spread fuera de alcance v1 (ADR-001) — el código queda latente en module2.
-tab_picks, tab_lineas, tab_historial, tab_bankroll, tab_analisis = st.tabs([
+tab_picks, tab_lineas, tab_historial, tab_paper, tab_bankroll, tab_analisis = st.tabs([
     "🎯 Picks del Día",
     "📥 Ingresar Líneas",
     "📋 Historial",
+    "📈 Paper Trading",
     "💰 Bankroll",
     "🔍 Diagnóstico"
 ])
@@ -541,6 +542,75 @@ with tab_historial:
                         'edge_pct', 'stake', 'resultado', 'pnl']
         cols_disponibles = [c for c in cols_mostrar if c in ledger.columns]
         st.dataframe(ledger[cols_disponibles].tail(50), use_container_width=True)
+
+# ════════════════════════════════════════════
+# TAB PAPER TRADING — validación en papel (Fase 3)
+# ════════════════════════════════════════════
+
+with tab_paper:
+    st.markdown("### 📈 Paper Trading — validación en papel")
+    st.caption("Modo PAPEL: sin dinero real. La meta es demostrar edge aquí antes "
+               "de arriesgar un peso (ADR-003).")
+
+    m = trk.metricas("PAPEL")
+    be = trk.BREAK_EVEN_PCT
+
+    if m.get("total_resueltos", 0) == 0:
+        st.info("Aún no hay picks resueltos. Genera picks, márcalos en **Historial** "
+                "y aquí verás el ROI, el win rate y la calibración en vivo.")
+    else:
+        wr  = m["win_rate"]
+        roi = m["roi_pct"]
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.metric("ROI papel", f"{roi:+.1f}%")
+        with col2:
+            st.metric("Win rate", f"{wr}%", delta=f"{wr - be:+.1f} vs break-even",
+                      delta_color="normal")
+        with col3:
+            st.metric("Picks resueltos", m["total_resueltos"])
+        with col4:
+            st.metric("PnL papel", f"${m['pnl_total']:+.2f}")
+
+        st.caption(f"Break-even a cuota 1.87 ≈ {be}%. Por debajo de eso, el sistema pierde.")
+
+        # ── Calibración en vivo ──
+        st.markdown("#### 🎯 Calibración en vivo (¿el edge alto gana más?)")
+        cal = m.get("calibracion_por_edge", {})
+        if cal:
+            filas = []
+            for b in ["bajo", "medio", "alto"]:
+                if b in cal:
+                    c = cal[b]
+                    filas.append({"Bucket edge": b, "Edge medio": f"{c['edge_medio']}%",
+                                  "Win rate": f"{c['win_rate']}%", "N": c["n"]})
+            st.dataframe(pd.DataFrame(filas), use_container_width=True, hide_index=True)
+            st.caption("Si el win rate NO sube del bucket bajo al alto, el modelo sobreestima su edge.")
+        else:
+            st.caption("Se necesitan ~6 picks resueltos para el desglose de calibración.")
+
+    # ── Gate papel → real ──
+    st.markdown("---")
+    st.markdown("#### 🚦 Gate: ¿listo para dinero real?")
+    gate = trk.estado_gate("PAPEL")
+    st.progress(gate["progreso_picks"],
+                text=f"Muestra: {gate['criterios']['picks']['actual']} / "
+                     f"{gate['criterios']['picks']['meta']} picks")
+
+    crit = gate["criterios"]
+    def _fmt(c, sufijo=""):
+        return ("✅" if c["ok"] else "⬜") + f" {c['actual']}{sufijo} (meta ≥ {c['meta']}{sufijo})"
+
+    st.markdown(f"- **Muestra:** {_fmt(crit['picks'])}")
+    st.markdown(f"- **Win rate:** {_fmt(crit['win_rate'], '%')}")
+    st.markdown(f"- **ROI:** {_fmt(crit['roi'], '%')}")
+
+    if gate["aprobado"]:
+        st.success("✅ Gate superado: el sistema demostró edge en papel. Recién aquí "
+                   "tendría sentido evaluar dinero real (con reglas de riesgo estrictas).")
+    else:
+        st.warning("⬜ Gate no superado todavía. Seguir en papel — sin arriesgar dinero.")
+
 
 # ════════════════════════════════════════════
 # TAB 5: BANKROLL

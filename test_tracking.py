@@ -96,6 +96,15 @@ try:
 except ValueError:
     check("resultado inválido lanza ValueError", True)
 
+# ── 9. Gate papel → real ──
+g = trk.estado_gate("PAPEL")
+# Con solo 2 picks resueltos (50% WR, ROI -33%), el gate NO debe aprobar.
+check("gate no aprueba con muestra chica", g["aprobado"] is False)
+check("gate criterio picks no cumplido (2 < 100)",
+      g["criterios"]["picks"]["ok"] is False, f"got {g['criterios']['picks']}")
+check("gate reporta break-even ~53.5",
+      abs(g["break_even_pct"] - 53.5) < 0.2, f"got {g['break_even_pct']}")
+
 # ── Limpieza ──
 if LEDGER_TEST.exists():
     LEDGER_TEST.unlink()

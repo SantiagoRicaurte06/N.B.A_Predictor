@@ -25,6 +25,20 @@ COLUMNS = [
 RESULTADOS_VALIDOS = {"W", "L", "VOID"}
 MODOS_VALIDOS = {"PAPEL", "REAL"}
 
+# Break-even de referencia a cuota típica de props (1.87). Un win rate por
+# debajo de esto = sistema perdedor, sin importar cuántos aciertos.
+BREAK_EVEN_PCT = round(1 / 1.87 * 100, 1)   # ≈ 53.5
+
+# GATE papel → dinero real (PLAN Fase 3, ADR-003). Umbrales calibrados con el
+# backtest: el pooled quedó ~break-even, así que para arriesgar dinero real hay
+# que DEMOSTRAR ventaja real en papel — muestra suficiente, win rate por encima
+# del break-even y ROI positivo.
+GATE_PAPEL = {
+    "min_picks":    100,     # muestra mínima para tener señal, no ruido
+    "min_win_rate": 54.0,    # por encima del break-even (~53.5)
+    "min_roi":      0.0,     # ROI positivo
+}
+
 
 # ─────────────────────────────────────────────
 # 1. LECTURA / ESCRITURA DEL LEDGER
@@ -227,6 +241,34 @@ def metricas(modo: str = "PAPEL") -> dict:
     resultado["calibracion_por_edge"] = calibracion
 
     return resultado
+
+
+# ─────────────────────────────────────────────
+# 6. GATE papel → real
+# ─────────────────────────────────────────────
+
+def estado_gate(modo: str = "PAPEL", gate: dict | None = None) -> dict:
+    """
+    Progreso hacia la graduación de papel a dinero real. Evalúa los tres
+    criterios del GATE contra las métricas actuales del ledger.
+    """
+    gate = gate or GATE_PAPEL
+    m = metricas(modo)
+    n   = m.get("total_resueltos", 0)
+    wr  = m.get("win_rate", 0.0)
+    roi = m.get("roi_pct", 0.0)
+
+    criterios = {
+        "picks":    {"actual": n,  "meta": gate["min_picks"],    "ok": n  >= gate["min_picks"]},
+        "win_rate": {"actual": wr, "meta": gate["min_win_rate"], "ok": wr >= gate["min_win_rate"]},
+        "roi":      {"actual": roi,"meta": gate["min_roi"],      "ok": roi >= gate["min_roi"]},
+    }
+    return {
+        "criterios": criterios,
+        "aprobado": all(c["ok"] for c in criterios.values()),
+        "break_even_pct": BREAK_EVEN_PCT,
+        "progreso_picks": round(min(n / gate["min_picks"], 1.0), 3) if gate["min_picks"] else 0.0,
+    }
 
 
 if __name__ == "__main__":
