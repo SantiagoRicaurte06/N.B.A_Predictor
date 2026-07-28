@@ -9,6 +9,10 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 
+# Semilla fija: el pipeline usa datos mock aleatorios; sin semilla, tests como
+# el de integración eran no-deterministas (a veces generaban pick, a veces no).
+np.random.seed(42)
+
 print("=" * 60)
 print("  [TEST] TEST TECNICO — NBA PREDICTOR PIPELINE")
 print("=" * 60)
