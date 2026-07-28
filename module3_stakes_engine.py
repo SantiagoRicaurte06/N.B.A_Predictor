@@ -7,92 +7,52 @@
 #    - Registro histórico de apuestas
 # ================================================
 
-import pandas as pd
-import numpy as np
-import json
-from pathlib import Path
 from datetime import datetime
 
-BANKROLL_FILE = Path("cache/bankroll.json")
-HISTORIAL_FILE = Path("cache/historial_apuestas.csv")
+import module8_tracking as trk
 
 # ─────────────────────────────────────────────
-# CONFIGURACIÓN DE RIESGO
+# CONFIGURACIÓN DE RIESGO — fuente única (PARAMS)
 # ─────────────────────────────────────────────
+# Todos los parámetros viven aquí. El dashboard los LEE de PARAMS en vez de
+# tener textos hardcodeados que se desincronizan del código.
 
-KELLY_FRACTION   = 0.10   # Kelly fraccionado al 10% (reducido por bajo rendimiento)
-MIN_EDGE         = 0.08   # Edge mínimo del 8% (aumentado por sobreestimación del modelo)
-MAX_BET_PCT      = 0.08   # Máximo 8% del bankroll en una sola apuesta
-MIN_BET_USD      = 2.0    # Apuesta mínima en USD
-CONFIANZA_MULT   = {      # Multiplicador de stake según confianza del modelo
-    'ALTA':  1.0,
-    'MEDIA': 0.50,         # Reducido de 0.75 por mal rendimiento
-    'BAJA':  0.25          # Reducido de 0.50 por mal rendimiento
+PARAMS = {
+    'kelly_fraction': 0.10,   # Kelly fraccionado
+    'min_edge':       0.08,   # Edge mínimo para considerar un pick
+    'max_bet_pct':    0.08,   # Tope: 8% del bankroll por apuesta
+    'min_bet_usd':    2.0,    # Apuesta mínima en USD
+    'confianza_mult': {'ALTA': 1.0, 'MEDIA': 0.50, 'BAJA': 0.25},
+    'mercados_activos': ['PTS'],   # v1 PTS-only (ADR-001)
+    'bankroll_inicial': 300.0,
 }
 
-# (ELIMINADO) MERCADOS_SUSPENDIDOS — lo poblaba el lazo de auto-mejora (ADR-004).
-# v1 es PTS-only (ADR-001), así que no hay mercados que suspender.
+# Alias de compatibilidad para el resto del módulo (leen de PARAMS).
+KELLY_FRACTION = PARAMS['kelly_fraction']
+MIN_EDGE       = PARAMS['min_edge']
+MAX_BET_PCT    = PARAMS['max_bet_pct']
+MIN_BET_USD    = PARAMS['min_bet_usd']
+CONFIANZA_MULT = PARAMS['confianza_mult']
 
 # ─────────────────────────────────────────────
-# 1. BANKROLL — Persistencia local
+# 1. BANKROLL — DERIVADO del ledger (ADR-007)
 # ─────────────────────────────────────────────
+# El bankroll ya no se almacena como número mutable. Se deriva del ledger de
+# module8 (suma de PnL). `cargar_bankroll` devuelve un dict con la misma forma
+# que antes para compatibilidad con el dashboard, pero todo se calcula en vivo.
 
-def cargar_bankroll(bankroll_inicial: float = 300.0) -> dict:
-    """Carga el estado del bankroll desde archivo local."""
-    if BANKROLL_FILE.exists():
-        with open(BANKROLL_FILE, 'r') as f:
-            return json.load(f)
-    # Primera vez
-    estado = {
-        'bankroll_actual': bankroll_inicial,
-        'bankroll_inicial': bankroll_inicial,
-        'total_apostado': 0.0,
-        'total_ganado': 0.0,
-        'apuestas_ganadas': 0,
-        'apuestas_perdidas': 0,
-        'roi_total': 0.0,
-        'fecha_inicio': datetime.now().isoformat(),
-        'ultima_actualizacion': datetime.now().isoformat()
+def cargar_bankroll(bankroll_inicial: float | None = None, modo: str = "PAPEL") -> dict:
+    """Estado del bankroll derivado del ledger. No lee ni escribe archivo mutable."""
+    inicial = bankroll_inicial if bankroll_inicial is not None else PARAMS['bankroll_inicial']
+    m = trk.metricas(modo)
+    return {
+        'bankroll_actual':   trk.bankroll_actual(inicial, modo),
+        'bankroll_inicial':  inicial,
+        'apuestas_ganadas':  m.get('ganadas', 0),
+        'apuestas_perdidas': m.get('perdidas', 0),
+        'roi_total':         m.get('roi_pct', 0.0),
+        'total_apostado':    m.get('apostado_total', 0.0),
     }
-    guardar_bankroll(estado)
-    return estado
-
-
-def guardar_bankroll(estado: dict):
-    """Persiste el estado del bankroll."""
-    BANKROLL_FILE.parent.mkdir(exist_ok=True)
-    estado['ultima_actualizacion'] = datetime.now().isoformat()
-    with open(BANKROLL_FILE, 'w') as f:
-        json.dump(estado, f, indent=2)
-
-
-def actualizar_bankroll_con_resultado(resultado: str,
-                                       monto_apostado: float,
-                                       odds: float,
-                                       estado: dict) -> dict:
-    """
-    Actualiza el bankroll después de conocer el resultado de una apuesta.
-    resultado: 'W' (ganó) o 'L' (perdió)
-    """
-    if resultado == 'W':
-        ganancia = monto_apostado * (odds - 1)
-        estado['bankroll_actual'] += ganancia
-        estado['total_ganado'] += ganancia
-        estado['apuestas_ganadas'] += 1
-    else:
-        estado['bankroll_actual'] -= monto_apostado
-        estado['apuestas_perdidas'] += 1
-
-    estado['total_apostado'] += monto_apostado
-
-    total_apuestas = estado['apuestas_ganadas'] + estado['apuestas_perdidas']
-    if total_apuestas > 0 and estado['total_apostado'] > 0:
-        estado['roi_total'] = round(
-            (estado['total_ganado'] - estado['total_apostado']) / estado['total_apostado'] * 100, 2
-        )
-
-    guardar_bankroll(estado)
-    return estado
 
 # ─────────────────────────────────────────────
 # 2. KELLY CRITERION
@@ -285,9 +245,9 @@ def analizar_pick_prop(prediccion_resultado: dict,
     ganancia_potencial = round(stake * (odds - 1), 2)
 
     return {
-        'jugador':            prediccion_resultado['jugador'],
-        'mercado':            prediccion_resultado['target'],
-        'tipo':               f'PROP {prediccion_resultado["target"]} {lado} {linea_casa}',
+        'jugador':            prediccion_resultado.get('jugador', ''),
+        'mercado':            prediccion_resultado.get('target', 'PTS'),
+        'tipo':               f'PROP {prediccion_resultado.get("target", "PTS")} {lado} {linea_casa}',
         'lado':               lado,
         'linea':              linea_casa,
         'prediccion_modelo':  prediccion,
@@ -402,60 +362,52 @@ def analizar_pick_spread(spread_resultado: dict,
     }
 
 # ─────────────────────────────────────────────
-# 4. HISTORIAL DE APUESTAS
+# 4. HISTORIAL DE APUESTAS — vía ledger de module8
 # ─────────────────────────────────────────────
 
-def guardar_picks_del_dia(picks: list[dict]):
-    """Guarda los picks generados en el historial CSV."""
-    if not picks:
-        return
+def guardar_picks_del_dia(picks: list[dict], modo: str = "PAPEL") -> list[int]:
+    """
+    Registra los picks del día en el ledger (module8). Cada pick de
+    analizar_pick_prop se mapea al contrato del ledger. Retorna los ids.
+    """
+    ids = []
+    for p in picks:
+        pick_ledger = {
+            'jugador':     p.get('jugador', ''),
+            'target':      p.get('mercado', 'PTS'),
+            'lado':        p.get('lado', ''),
+            'linea':       p.get('linea'),
+            'odds':        p.get('odds'),
+            'pred_media':  p.get('prediccion_modelo'),
+            'pred_sigma':  p.get('pred_sigma'),   # None en v1 (llega en Fase 2)
+            'prob_modelo': p.get('prob_modelo'),
+            'edge_pct':    p.get('edge_pct'),
+            'stake':       p.get('stake_usd'),
+        }
+        ids.append(trk.registrar_pick(pick_ledger, modo=modo))
+    return ids
 
-    df_nuevo = pd.DataFrame(picks)
-    df_nuevo['resultado'] = None  # se llenará después
 
-    if HISTORIAL_FILE.exists():
-        df_historial = pd.read_csv(HISTORIAL_FILE)
-        df_historial = pd.concat([df_historial, df_nuevo], ignore_index=True)
-    else:
-        df_historial = df_nuevo
-
-    HISTORIAL_FILE.parent.mkdir(exist_ok=True)
-    df_historial.to_csv(HISTORIAL_FILE, index=False)
-
-
-def calcular_estadisticas_historial() -> dict:
-    """Calcula estadísticas del historial de apuestas."""
-    if not HISTORIAL_FILE.exists():
-        return {}
-
-    df = pd.read_csv(HISTORIAL_FILE)
-    # Excluir apuestas anuladas (VOID) de las estadísticas
-    df_resultado = df.dropna(subset=['resultado'])
-    df_resultado = df_resultado[df_resultado['resultado'] != 'VOID']
-
-    if df_resultado.empty:
+def calcular_estadisticas_historial(modo: str = "PAPEL") -> dict:
+    """Estadísticas del historial, derivadas del ledger (module8)."""
+    m = trk.metricas(modo)
+    if m.get('total_resueltos', 0) == 0:
         return {'mensaje': 'Sin resultados registrados aún'}
 
-    total    = len(df_resultado)
-    ganadas  = len(df_resultado[df_resultado['resultado'] == 'W'])
-    perdidas = len(df_resultado[df_resultado['resultado'] == 'L'])
-    anuladas = len(df[df['resultado'] == 'VOID'])  # Contar anuladas por separado
-
-    apostado = df_resultado['stake_usd'].sum()
-    ganado   = df_resultado[df_resultado['resultado'] == 'W']['ganancia_potencial'].sum()
-    perdido  = df_resultado[df_resultado['resultado'] == 'L']['stake_usd'].sum()
-
-    roi = ((ganado - perdido) / apostado * 100) if apostado > 0 else 0
+    edges = m.get('calibracion_por_edge', {})
+    avg_edge = round(
+        sum(b['edge_medio'] for b in edges.values()) / len(edges), 1
+    ) if edges else 0
 
     return {
-        'total_picks': total,
-        'ganadas': ganadas,
-        'perdidas': perdidas,
-        'anuladas': anuladas,
-        'win_rate': round(ganadas / total * 100, 1) if total > 0 else 0,
-        'apostado_total': round(apostado, 2),
-        'roi_pct': round(roi, 2),
-        'avg_edge_pct': round(df_resultado['edge_pct'].mean(), 1) if 'edge_pct' in df_resultado else 0
+        'total_picks':    m['total_resueltos'],
+        'ganadas':        m['ganadas'],
+        'perdidas':       m['perdidas'],
+        'anuladas':       m['anuladas'],
+        'win_rate':       m['win_rate'],
+        'apostado_total': m['apostado_total'],
+        'roi_pct':        m['roi_pct'],
+        'avg_edge_pct':   avg_edge,
     }
 
 # ─────────────────────────────────────────────
@@ -464,32 +416,32 @@ def calcular_estadisticas_historial() -> dict:
 
 def generar_stakes(predicciones: list[dict],
                    lineas_manuales: dict,
-                   bankroll_inicial: float = 300.0) -> tuple[list[dict], dict]:
+                   bankroll_inicial: float | None = None,
+                   modo: str = "PAPEL") -> tuple[list[dict], dict, dict]:
     """
     Recibe predicciones del Módulo 2 y líneas ingresadas manualmente.
-    Retorna picks con stakes y estado del bankroll.
-
-    lineas_manuales formato:
-    {
-      'LeBron James_PTS': {'linea': 25.5, 'odds_over': 1.85, 'odds_under': 1.95},
-      ...
-    }
+    v1 procesa SOLO mercados activos (PTS, ADR-001). Registra los picks en
+    el ledger con el modo indicado (PAPEL por defecto — sin dinero real).
+    Retorna (picks, estado_bankroll_derivado, stats).
     """
     print("\n" + "="*55)
     print("  💰 MÓDULO 3: STAKES ENGINE (Kelly Criterion)")
     print("="*55)
 
-    estado_bankroll = cargar_bankroll(bankroll_inicial)
+    estado_bankroll = cargar_bankroll(bankroll_inicial, modo)
     bankroll = estado_bankroll['bankroll_actual']
-    print(f"\n  💵 Bankroll actual: ${bankroll:.2f}")
+    print(f"\n  💵 Bankroll actual ({modo}): ${bankroll:.2f}")
 
     picks_con_valor = []
 
     for pred in predicciones:
-        jugador = pred.get('jugador', '')
-        target  = pred.get('target', '')
-        key     = f"{jugador}_{target}"
+        target = pred.get('target', '')
+        # v1: solo mercados activos (PTS)
+        if target not in PARAMS['mercados_activos']:
+            continue
 
+        jugador = pred.get('jugador', '')
+        key     = f"{jugador}_{target}"
         if key not in lineas_manuales:
             continue
 
@@ -505,19 +457,17 @@ def generar_stakes(predicciones: list[dict],
     # Ordenar por edge descendente
     picks_con_valor.sort(key=lambda x: x['edge_pct'], reverse=True)
 
-    # Guardar en historial
+    # Registrar en el ledger (modo PAPEL por defecto)
     if picks_con_valor:
-        guardar_picks_del_dia(picks_con_valor)
+        guardar_picks_del_dia(picks_con_valor, modo=modo)
 
     print(f"\n  ✅ {len(picks_con_valor)} picks con valor encontrados")
 
-    # Estadísticas históricas
-    stats = calcular_estadisticas_historial()
-
+    stats = calcular_estadisticas_historial(modo)
     return picks_con_valor, estado_bankroll, stats
 
 
 if __name__ == "__main__":
-    print("Módulo 3 cargado correctamente.")
-    print("Kelly Criterion configurado al 25% (fraccionado)")
+    print("Módulo 3 — Stakes Engine (PTS-only, ADR-001)")
+    print(f"Parámetros: {PARAMS}")
     print(f"Edge mínimo: {MIN_EDGE*100}% | Máximo por apuesta: {MAX_BET_PCT*100}%")

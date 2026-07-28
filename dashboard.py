@@ -15,11 +15,12 @@ import sys
 sys.path.append(str(Path(__file__).parent))
 
 from module1_data_engine import cargar_todos_los_datos
-from module2_prediction_engine import generar_predicciones, predecir_total_poisson, predecir_spread
+from module2_prediction_engine import generar_predicciones
 from module3_stakes_engine import (
-    generar_stakes, cargar_bankroll, actualizar_bankroll_con_resultado,
-    calcular_estadisticas_historial, HISTORIAL_FILE
+    generar_stakes, cargar_bankroll,
+    calcular_estadisticas_historial, PARAMS,
 )
+import module8_tracking as trk
 from module5_error_analysis import (
     ejecutar_analisis_completo,
     PATRONES_FILE,
@@ -150,15 +151,14 @@ with st.sidebar:
 
     st.markdown("---")
     st.markdown("### ⚠️ Riesgo")
-    st.caption("Kelly Criterion al 10%")
-    st.caption("Edge mínimo: 8%")
-    st.caption("Máx por apuesta: 8% bankroll")
+    st.caption(f"Kelly Criterion al {PARAMS['kelly_fraction']*100:.0f}%")
+    st.caption(f"Edge mínimo: {PARAMS['min_edge']*100:.0f}%")
+    st.caption(f"Máx por apuesta: {PARAMS['max_bet_pct']*100:.0f}% bankroll")
 
-    # Mercados suspendidos temporalmente
     st.markdown("---")
-    st.markdown("### 🚫 Mercados Suspendidos")
-    st.error("**AST y REB** temporalmente desactivados")
-    st.caption("Win rate < 35% — Solo PTS disponible")
+    st.markdown("### 🎯 Alcance v1")
+    st.info(f"Mercado activo: **{', '.join(PARAMS['mercados_activos'])}**")
+    st.caption("v1 enfocada en PTS (ADR-001). Modo PAPEL — sin dinero real.")
 
     st.markdown("---")
     if st.button("🔄 Recargar Datos", use_container_width=True):
@@ -202,13 +202,13 @@ st.markdown("---")
 # TABS PRINCIPALES
 # ─────────────────────────────────────────────
 
-tab_picks, tab_lineas, tab_totales, tab_historial, tab_bankroll, tab_analisis = st.tabs([
+# Totales & Spread fuera de alcance v1 (ADR-001) — el código queda latente en module2.
+tab_picks, tab_lineas, tab_historial, tab_bankroll, tab_analisis = st.tabs([
     "🎯 Picks del Día",
     "📥 Ingresar Líneas",
-    "📊 Totales & Spread",
     "📋 Historial",
     "💰 Bankroll",
-    "🔍 Análisis de Errores"
+    "🔍 Diagnóstico"
 ])
 
 # ════════════════════════════════════════════
@@ -478,78 +478,8 @@ with tab_lineas:
                 st.success(f"✅ {len(picks)} picks con valor generados — ve a **Picks del Día**")
                 st.rerun()
 
-# ════════════════════════════════════════════
-# TAB 3: TOTALES & SPREAD
-# ════════════════════════════════════════════
-
-with tab_totales:
-    st.markdown("### 📊 Totales O/U y Spread")
-    st.caption("Ingresa los promedios de los equipos para generar predicciones de partido completo.")
-
-    col_a, col_b = st.columns(2)
-
-    with col_a:
-        home_team = st.text_input("Equipo Local", value="LAL")
-        home_pts  = st.number_input("Promedio puntos LOCAL (L10)", value=113.0, step=0.5)
-        home_def  = st.number_input("Puntos recibidos LOCAL (L10)", value=110.0, step=0.5)
-
-    with col_b:
-        away_team = st.text_input("Equipo Visitante", value="GSW")
-        away_pts  = st.number_input("Promedio puntos VISITANTE (L10)", value=115.0, step=0.5)
-        away_def  = st.number_input("Puntos recibidos VISITANTE (L10)", value=112.0, step=0.5)
-
-    st.markdown("---")
-    col_t, col_s = st.columns(2)
-
-    with col_t:
-        linea_total    = st.number_input("Línea Total (O/U)", value=225.5, step=0.5)
-        odds_over_tot  = st.number_input("Odds Over", value=1.87, step=0.01, key="to")
-        odds_under_tot = st.number_input("Odds Under", value=1.87, step=0.01, key="tu")
-
-    with col_s:
-        linea_spread   = st.number_input("Spread (+ favorece visitante)", value=-5.5, step=0.5)
-        odds_home_sp   = st.number_input("Odds Local cubre spread", value=1.87, step=0.01, key="sh")
-        odds_away_sp   = st.number_input("Odds Visitante cubre spread", value=1.87, step=0.01, key="sa")
-
-    if st.button("🔢 Analizar Partido", use_container_width=True):
-        # Total
-        resultado_total = predecir_total_poisson(home_pts, away_pts, linea_total)
-        resultado_spread = predecir_spread(home_pts, away_pts, home_def, away_def, linea_spread)
-
-        st.markdown("---")
-        col_r1, col_r2 = st.columns(2)
-
-        with col_r1:
-            st.markdown("#### 🔢 Total O/U")
-            st.metric("Total esperado", f"{resultado_total['total_esperado']} pts")
-            st.metric("Prob OVER", f"{resultado_total['prob_over']*100:.1f}%")
-            st.metric("Prob UNDER", f"{resultado_total['prob_under']*100:.1f}%")
-
-            edge_over  = (resultado_total['prob_over'] * odds_over_tot) - 1
-            edge_under = (resultado_total['prob_under'] * odds_under_tot) - 1
-
-            if max(edge_over, edge_under) >= 0.05:
-                lado = "OVER" if edge_over > edge_under else "UNDER"
-                edge = max(edge_over, edge_under)
-                st.success(f"✅ **{lado}** {linea_total} | Edge: {edge*100:.1f}%")
-            else:
-                st.warning("Sin valor claro en totales")
-
-        with col_r2:
-            st.markdown("#### 📏 Spread")
-            st.metric("Margen esperado", f"{resultado_spread['margen_esperado']:+.1f}")
-            st.metric(f"Prob {home_team} cubre", f"{resultado_spread['prob_home_cover']*100:.1f}%")
-            st.metric(f"Prob {away_team} cubre", f"{resultado_spread['prob_away_cover']*100:.1f}%")
-
-            edge_home = (resultado_spread['prob_home_cover'] * odds_home_sp) - 1
-            edge_away = (resultado_spread['prob_away_cover'] * odds_away_sp) - 1
-
-            if max(edge_home, edge_away) >= 0.05:
-                lado  = home_team if edge_home > edge_away else away_team
-                edge  = max(edge_home, edge_away)
-                st.success(f"✅ **{lado}** {linea_spread:+.1f} | Edge: {edge*100:.1f}%")
-            else:
-                st.warning("Sin valor claro en spread")
+# NOTA: la pestaña "Totales & Spread" se retiró en v1 (ADR-001). Las funciones
+# predecir_total_poisson / predecir_spread siguen en module2 como código latente.
 
 # ════════════════════════════════════════════
 # TAB 4: HISTORIAL
@@ -569,50 +499,44 @@ with tab_historial:
         with col3: st.metric("Total picks", stats.get('total_picks', 0))
         with col4: st.metric("Edge promedio", f"{stats.get('avg_edge_pct', 0)}%")
 
-    if HISTORIAL_FILE.exists():
-        df_hist = pd.read_csv(HISTORIAL_FILE)
+    ledger = trk._cargar_ledger()
+    if not ledger.empty:
         st.markdown("---")
 
-        # Registrar resultados pendientes
-        pendientes = df_hist[df_hist['resultado'].isna()]
+        # Registrar resultados pendientes (marca por id → module8; el bankroll
+        # se re-deriva solo, ADR-007).
+        pendientes = ledger[ledger['resultado'].isna()]
         if not pendientes.empty:
             st.markdown(f"#### ⏳ {len(pendientes)} picks pendientes de resultado")
 
-            for idx, row in pendientes.tail(20).iterrows():
+            for _, row in pendientes.tail(20).iterrows():
+                pick_id = int(row['id'])
                 col_i, col_r = st.columns([4, 1])
                 with col_i:
-                    st.markdown(f"**{row.get('jugador','')}** — {row.get('tipo','')} | Stake: ${row.get('stake_usd', 0):.2f}")
+                    st.markdown(
+                        f"**{row.get('jugador','')}** — "
+                        f"{row.get('target','')} {row.get('lado','')} {row.get('linea','')} "
+                        f"| Stake: ${float(row.get('stake', 0) or 0):.2f}"
+                    )
                 with col_r:
                     resultado = st.selectbox(
                         "Resultado",
                         ["—", "✅ Ganó", "❌ Perdió", "⚪ Anulada"],
-                        key=f"res_{idx}"
+                        key=f"res_{pick_id}"
                     )
                     if resultado != "—":
-                        if 'Anulada' in resultado:
-                            # Apuesta anulada: no afecta bankroll, se devuelve el stake
-                            df_hist.at[idx, 'resultado'] = 'VOID'
-                            df_hist.to_csv(HISTORIAL_FILE, index=False)
-                            st.success(f"⚪ Apuesta anulada — stake devuelto")
-                            st.rerun()
-                        else:
-                            wl = 'W' if 'Ganó' in resultado else 'L'
-                            df_hist.at[idx, 'resultado'] = wl
-                            df_hist.to_csv(HISTORIAL_FILE, index=False)
-                            estado_bk = actualizar_bankroll_con_resultado(
-                                wl, float(row.get('stake_usd', 0)),
-                                float(row.get('odds', 1.87)),
-                                st.session_state.bankroll
-                            )
-                            st.session_state.bankroll = estado_bk
-                            st.rerun()
+                        codigo = ("VOID" if "Anulada" in resultado
+                                  else ("W" if "Ganó" in resultado else "L"))
+                        trk.registrar_resultado(pick_id, codigo)
+                        st.session_state.bankroll = cargar_bankroll()
+                        st.rerun()
 
         # Tabla completa
-        st.markdown("#### 📊 Todos los picks")
-        cols_mostrar = ['jugador', 'tipo', 'prediccion_modelo', 'linea',
-                        'odds', 'edge_pct', 'stake_usd', 'ganancia_potencial', 'resultado']
-        cols_disponibles = [c for c in cols_mostrar if c in df_hist.columns]
-        st.dataframe(df_hist[cols_disponibles].tail(50), use_container_width=True)
+        st.markdown("#### 📊 Todos los picks (ledger)")
+        cols_mostrar = ['id', 'jugador', 'target', 'lado', 'linea', 'odds',
+                        'edge_pct', 'stake', 'resultado', 'pnl']
+        cols_disponibles = [c for c in cols_mostrar if c in ledger.columns]
+        st.dataframe(ledger[cols_disponibles].tail(50), use_container_width=True)
 
 # ════════════════════════════════════════════
 # TAB 5: BANKROLL
@@ -639,31 +563,16 @@ with tab_bankroll:
         st.metric("ROI Total", f"{bk.get('roi_total', 0):.1f}%")
 
     st.markdown("---")
-    st.markdown("#### ℹ️ Cómo funciona el Kelly Criterion")
-    st.markdown("""
-    El sistema usa **Kelly Criterion al 25%** (fraccionado) para proteger tu bankroll:
+    st.markdown("#### ℹ️ Cómo funciona el sizing")
+    st.markdown(f"""
+    - **Kelly Criterion al {PARAMS['kelly_fraction']*100:.0f}%** (fraccionado) para limitar el riesgo de ruina.
+    - **Edge mínimo {PARAMS['min_edge']*100:.0f}%** filtra apuestas sin valor real.
+    - **Máximo {PARAMS['max_bet_pct']*100:.0f}%** del bankroll por apuesta.
 
-    - **Kelly completo** maximiza el crecimiento pero es muy agresivo
-    - **25% del Kelly** reduce el riesgo de ruina manteniendo el crecimiento
-    - **Edge mínimo 5%** filtra apuestas sin valor real
-    - **Máximo 8%** del bankroll por apuesta para diversificar riesgo
-
-    Con $300 de bankroll, las apuestas típicas serán entre **$3 y $24**.
+    El bankroll se **deriva del ledger** (suma de PnL), no se ajusta a mano —
+    así es siempre reproducible y auditable (ADR-007). Modo actual: **PAPEL**
+    (sin dinero real hasta validar edge por backtest, ADR-003).
     """)
-
-    st.markdown("---")
-    nuevo_bankroll = st.number_input(
-        "Ajustar bankroll manualmente ($)",
-        value=float(bk.get('bankroll_actual', 300)),
-        step=10.0
-    )
-    if st.button("💾 Guardar ajuste de bankroll"):
-        from module3_stakes_engine import guardar_bankroll
-        bk['bankroll_actual'] = nuevo_bankroll
-        guardar_bankroll(bk)
-        st.session_state.bankroll = bk
-        st.success("Bankroll actualizado")
-        st.rerun()
 
 # ════════════════════════════════════════════
 # TAB 6: ANÁLISIS DE ERRORES
