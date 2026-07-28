@@ -121,10 +121,33 @@ def rankear_por_edge_potencial(elegibles: pd.DataFrame) -> pd.DataFrame:
 # 2. HISTORIAL DE PARTIDOS
 # ─────────────────────────────────────────────
 
+def _asegurar_min_num(df: pd.DataFrame) -> pd.DataFrame:
+    """Garantiza la columna MIN_num a partir de MIN ('35:00' → 35). DATA_SPEC §7.1."""
+    if 'MIN_num' not in df.columns and 'MIN' in df.columns:
+        df['MIN_num'] = df['MIN'].astype(str).str.split(':').str[0]
+    if 'MIN_num' in df.columns:
+        df['MIN_num'] = pd.to_numeric(df['MIN_num'], errors='coerce').fillna(0)
+    return df
+
+
+def _filtrar_dnp(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Excluye partidos DNP (0 minutos) antes de exponer el gamelog. DATA_SPEC §7.1:
+    un DNP llega con MIN vacío → MIN_num=0 y contaminaría las features rolling.
+    """
+    if df is None or 'MIN_num' not in df.columns:
+        return df
+    return df[df['MIN_num'] > 0].reset_index(drop=True)
+
+
 def get_player_gamelog(player_id: int,
                         temporada: str = TEMPORADA,
                         usar_cache: bool = True) -> pd.DataFrame | None:
-    """Descarga historial de partidos de un jugador con cache de 6 horas."""
+    """
+    Descarga historial de partidos de un jugador con cache de 6 horas.
+    El gamelog expuesto excluye partidos DNP (DATA_SPEC §7.1). El cache
+    conserva el log crudo; el filtro se aplica al devolver.
+    """
     cache_path = CACHE_DIR / f"gamelog_{player_id}_{temporada}.csv"
 
     if usar_cache and cache_path.exists():
@@ -132,7 +155,8 @@ def get_player_gamelog(player_id: int,
         if edad_horas < 6:
             df = pd.read_csv(cache_path)
             df['GAME_DATE'] = pd.to_datetime(df['GAME_DATE'])
-            return df
+            df = _asegurar_min_num(df)
+            return _filtrar_dnp(df)
 
     try:
         time.sleep(0.6)
@@ -154,13 +178,11 @@ def get_player_gamelog(player_id: int,
             if col in log.columns:
                 log[col] = pd.to_numeric(log[col], errors='coerce')
 
-        log['MIN_num'] = (
-            log['MIN'].astype(str).str.split(':').str[0]
-        )
-        log['MIN_num'] = pd.to_numeric(log['MIN_num'], errors='coerce').fillna(0)
+        log = _asegurar_min_num(log)
 
+        # Cache faithful (incluye DNP); se filtra solo lo que se devuelve.
         log.to_csv(cache_path, index=False)
-        return log
+        return _filtrar_dnp(log)
 
     except Exception:
         return None
@@ -309,14 +331,27 @@ def detectar_inactividad_reciente(gamelog: pd.DataFrame, dias_umbral: int = 8) -
 
 
 def is_player_available(nombre: str, injury_df: pd.DataFrame, gamelogs: dict = None) -> tuple[bool, str]:
-    """Verifica disponibilidad de un jugador según injury report y gamelogs."""
+    """
+    Verifica disponibilidad según injury report y gamelogs.
+    Matching robusto (DATA_SPEC §7.3): primero por nombre completo; si no hay,
+    fallback por apellido, avisando si es ambiguo (dos 'Williams', 'Jones'...).
+    """
     if injury_df.empty:
         disponible_injury = True
     else:
-        apellido = nombre.lower().split()[-1]
-        match = injury_df[
-            injury_df['player_name'].str.lower().str.contains(apellido, na=False)
-        ]
+        nombre_lower = nombre.lower().strip()
+        nombres_injury = injury_df['player_name'].astype(str).str.lower().str.strip()
+
+        # 1) Coincidencia exacta por nombre completo
+        match = injury_df[nombres_injury == nombre_lower]
+
+        # 2) Fallback por apellido (con aviso si es ambiguo)
+        if match.empty:
+            apellido = nombre_lower.split()[-1] if nombre_lower else ''
+            match = injury_df[nombres_injury.str.contains(apellido, na=False, regex=False)] if apellido else injury_df.iloc[0:0]
+            if len(match) > 1:
+                print(f"    ⚠️  Lesión: match ambiguo para '{nombre}' por apellido "
+                      f"'{apellido}' ({len(match)} coincidencias) — usando la primera")
 
         if match.empty:
             disponible_injury = True
@@ -386,23 +421,39 @@ def get_equipos_hoy() -> set[str]:
     return equipos
 
 
+# Variantes equivalentes de abreviaciones entre NBA API y ESPN (DATA_SPEC §7.2).
+# Cada variante mapea a una forma canónica única.
+_TEAM_ALIASES = {
+    'NOP': 'NOP', 'NO':  'NOP',
+    'UTA': 'UTA', 'UTAH': 'UTA',
+    'GSW': 'GSW', 'GS':  'GSW',
+    'PHX': 'PHX', 'PHO': 'PHX',
+    'SAS': 'SAS', 'SA':  'SAS',
+    'NYK': 'NYK', 'NY':  'NYK',
+}
+
+
+def normalizar_team(abbrev: str) -> str:
+    """
+    Normaliza una abreviación de equipo a su forma canónica, para que los
+    cruces entre fuentes (NBA API vs ESPN) no fallen en silencio. DATA_SPEC §7.2.
+    """
+    if not abbrev:
+        return ''
+    a = str(abbrev).strip().upper()
+    return _TEAM_ALIASES.get(a, a)
+
+
 def jugador_juega_hoy(team_abbrev: str, equipos_hoy: set[str]) -> bool:
     """
-    Verifica si el equipo de un jugador juega hoy.
+    Verifica si el equipo de un jugador juega hoy, comparando en forma canónica.
     Si no hay equipos detectados, retorna True (no filtrar).
     """
     if not equipos_hoy:
         return True  # si falla el schedule, no filtrar
 
-    # Algunas abreviaciones difieren entre NBA API y ESPN
-    mapeo = {
-        'NOP': 'NO',  'UTA': 'UTAH', 'GS': 'GSW',
-        'PHX': 'PHO', 'SA':  'SAS',  'NY': 'NYK',
-    }
-    abrev_espn   = mapeo.get(team_abbrev, team_abbrev)
-    abrev_nba    = {v: k for k, v in mapeo.items()}.get(team_abbrev, team_abbrev)
-
-    return team_abbrev in equipos_hoy or abrev_espn in equipos_hoy or abrev_nba in equipos_hoy
+    objetivo = normalizar_team(team_abbrev)
+    return any(normalizar_team(e) == objetivo for e in equipos_hoy)
 
 
 # ─────────────────────────────────────────────
