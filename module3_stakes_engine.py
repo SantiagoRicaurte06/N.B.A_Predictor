@@ -19,7 +19,22 @@ import module8_tracking as trk
 
 PARAMS = {
     'kelly_fraction': 0.10,   # Kelly fraccionado
-    'min_edge':       0.08,   # Edge mínimo para considerar un pick
+    'min_edge':       0.08,   # Piso económico: valor esperado suficiente
+    # Piso de CONVICCIÓN, medido en validación (ver CALIBRACION.md).
+    #
+    # Por qué hace falta uno aparte del edge: edge = prob × cuota − 1, así que
+    # un mismo edge se alcanza con prob alta y cuota mala o al revés. Filtrar
+    # solo por edge deja pasar picks de baja convicción cuando la cuota es
+    # generosa — y lo que aguantó fuera de muestra fue el RANKING del modelo,
+    # no el edge.
+    #
+    # Acierto medido en validación (6 142 puntos) por umbral de probabilidad:
+    #     >= 0.55  ->  53.2 %   (por DEBAJO del break-even de 53.5 %)
+    #     >= 0.60  ->  55.7 %
+    #     >= 0.65  ->  58.3 %
+    # El antiguo min_edge de 0.08 equivale a prob ~57.8 % con cuota 1.87, o sea
+    # dentro de la zona perdedora.
+    'min_prob':       0.65,
     'max_bet_pct':    0.08,   # Tope: 8% del bankroll por apuesta
     'min_bet_usd':    2.0,    # Apuesta mínima en USD
     'confianza_mult': {'ALTA': 1.0, 'MEDIA': 0.50, 'BAJA': 0.25},
@@ -30,6 +45,7 @@ PARAMS = {
 # Alias de compatibilidad para el resto del módulo (leen de PARAMS).
 KELLY_FRACTION = PARAMS['kelly_fraction']
 MIN_EDGE       = PARAMS['min_edge']
+MIN_PROB       = PARAMS['min_prob']
 MAX_BET_PCT    = PARAMS['max_bet_pct']
 MIN_BET_USD    = PARAMS['min_bet_usd']
 CONFIANZA_MULT = PARAMS['confianza_mult']
@@ -229,6 +245,11 @@ def analizar_pick_prop(prediccion_resultado: dict,
         lado   = 'UNDER'
         prob   = prob_under
         odds   = odds_under
+
+    # Filtro de convicción: por debajo de este umbral el sistema mide por
+    # debajo del break-even, por buena que sea la cuota.
+    if prob < MIN_PROB:
+        return None
 
     # Calcular edge solo para el lado lógico
     edge = calcular_edge(prob, odds)
