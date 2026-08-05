@@ -127,11 +127,16 @@ def construir_test_set(gamelogs: dict, t1, t2,
 
 
 def evaluar(predict_for, test_set: list, gamelogs: dict,
-            verbose: bool = True, etiqueta: str = "") -> dict:
+            verbose: bool = True, etiqueta: str = "",
+            prob_fn=None) -> dict:
     """
     Evalúa un `predict_for(key, i, historia) -> (media, sigma) | None` sobre un
     test_set fijo. Reusa la línea sintética y las métricas del backtest, para
     que baseline y pooled sean 100% comparables.
+
+    `prob_fn(media, linea, avg_min) -> P(real > linea)` es opcional. Si se pasa,
+    la probabilidad sale de ahí en vez de la normal. Sirve para modelos que
+    conocen la forma real de su error; los que no, siguen con Φ como siempre.
     """
     filas = []
     jugadores = set()
@@ -156,8 +161,18 @@ def evaluar(predict_for, test_set: list, gamelogs: dict,
             continue
 
         lado = 'OVER' if media > linea else 'UNDER'
-        z = (media - linea) / sigma
-        prob = float(norm.cdf(z)) if lado == 'OVER' else float(norm.cdf(-z))
+
+        p_over = None
+        if prob_fn is not None:
+            avg_min = pd.to_numeric(historia.get('MIN_num'), errors='coerce').tail(10).mean()
+            p_over = prob_fn(media, linea, float(avg_min) if pd.notna(avg_min) else np.nan)
+
+        if p_over is None:
+            z = (media - linea) / sigma
+            prob = float(norm.cdf(z)) if lado == 'OVER' else float(norm.cdf(-z))
+        else:
+            prob = float(p_over) if lado == 'OVER' else float(1 - p_over)
+
         edge = prob * ODDS_PROXY - 1
         gano = (actual > linea) if lado == 'OVER' else (actual < linea)
 
