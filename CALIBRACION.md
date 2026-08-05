@@ -55,12 +55,55 @@ Lo que cambia es que ahora los números significan algo y Kelly puede usarlos.
 
 ## Sigue habiendo sobreconfianza
 
-Entre 3 y 7 puntos porcentuales en todos los tramos. Eso ya **no es la sigma**:
-es la distribución. La probabilidad se calcula con una normal, pero los puntos
-anotados tienen cola derecha. Aplicar una normal a una distribución sesgada
-exagera las colas — justo donde viven los picks de alta confianza.
+Entre 3 y 7 puntos porcentuales en todos los tramos, con la sigma ya corregida.
 
-Ese es el siguiente arreglo pendiente, y probablemente vale más que este.
+---
+
+## Hipótesis DESCARTADA: la cola derecha
+
+La sospecha era que el culpable fuese la normal. Los puntos anotados tienen
+cola derecha (medido: **asimetría 0.429** en los residuos), y una normal sobre
+una distribución sesgada exagera las colas.
+
+Se implementó la alternativa: en vez de suponer la forma, usar la medida.
+
+    actual = media + residuo  →  P(actual > línea) = P(residuo > línea − media)
+
+leyendo esa probabilidad de 201 cuantiles de los residuos out-of-fold. Para
+una predicción de 20 puntos daba entre 2.6 y 5.2 puntos menos que la normal,
+justo la magnitud de la sobreconfianza observada. Encajaba.
+
+**No funcionó.** Medido sobre el dev set (2 335 puntos):
+
+| | Normal | Empírica |
+|---|---|---|
+| \|brecha\| media ponderada | **5.0 %** | 5.6 % |
+| Acierto con umbral 0.60 | **59.1 %** | 54.8 % |
+| Acierto con umbral 0.65 | **62.4 %** | 61.6 % |
+
+Empeora en todo. El tramo 0.60–0.65 pasa de acertar 57.6 % a 50.6 %: la
+corrección mueve picks distintos a ese tramo, y son peores.
+
+La explicación más probable es que la asimetría no es una constante de la liga
+sino algo propio de cada jugador y situación, así que una distribución agregada
+no la representa — y encima se estima en el periodo de entrenamiento y se
+aplica a otro.
+
+**Decisión:** la maquinaria (`ModeloPooled.prob_supera` y el parámetro
+`prob_fn` de `evaluar`) se conserva para poder repetir el experimento, pero
+**no está activa en ningún flujo**. Todo sigue usando la normal. Queda escrito
+para que nadie —incluido el yo del futuro— vuelva a intentarlo creyendo que es
+obviamente correcto.
+
+## Qué queda entonces
+
+La sobreconfianza de ~5 puntos sigue sin explicación. Pero hay una salida que
+**no depende de arreglarla**: lo que aguantó fuera de muestra no fue el valor
+de la probabilidad, fue el **orden**. El ranking es monotónico y se sostiene.
+
+Por eso lo práctico no es seguir persiguiendo la calibración, sino mover el
+umbral de operación a donde el acierto MEDIDO supera el break-even. Eso solo
+exige que el ranking sea correcto, que es justo lo que está demostrado.
 
 ---
 
