@@ -34,6 +34,11 @@ FEATURES = [
 ]
 TARGET = 'PTS'
 
+# Nº de tramos temporales para estimar la sigma fuera de muestra.
+# 5 tramos = 4 reentrenamientos extra; sobre ~33k filas cuesta segundos.
+N_TRAMOS_SIGMA = 5
+MIN_FILAS_OOF = 2000    # por debajo de esto, los tramos quedan demasiado flacos
+
 
 class ModeloPooled:
     def __init__(self, random_state: int = 42):
@@ -67,6 +72,66 @@ class ModeloPooled:
         data = data.dropna(subset=cols + [TARGET])
         return data
 
+    def _nuevo_estimador(self) -> XGBRegressor:
+        """Los hiperparámetros viven en un solo sitio: el modelo final y los
+        tramos que estiman la sigma tienen que ser el MISMO modelo, o la sigma
+        mediría la dispersión de otra cosa."""
+        return XGBRegressor(
+            n_estimators=300, learning_rate=0.05, max_depth=4,
+            subsample=0.8, colsample_bytree=0.8, min_child_weight=5,
+            reg_lambda=1.0, random_state=self.random_state, verbosity=0,
+        )
+
+    def _residuos_fuera_de_muestra(self, X, y, fechas):
+        """
+        Residuos out-of-fold por ventana temporal expansiva.
+
+        POR QUÉ EXISTE ESTA FUNCIÓN
+        ---------------------------
+        Antes la sigma salía de los residuos IN-SAMPLE, es decir del error del
+        modelo sobre los datos con los que ya se había entrenado. XGBoost ajusta
+        muy fino su propio entrenamiento, así que ese error es artificialmente
+        pequeño. Medido en el backtest: sigma declarada 5.99 contra 6.42 real,
+        un 7 % baja.
+
+        Como `prob = Φ((media − línea) / sigma)`, una sigma corta infla TODAS las
+        probabilidades. De ahí salía que el modelo declarara un 72.6 % y acertara
+        un 59.1 %: no es que fallara la predicción, es que mentía la confianza.
+
+        Aquí los datos se ordenan por fecha y se parten en tramos: cada tramo se
+        predice con un modelo entrenado SOLO con lo anterior. Es el mismo error
+        que se verá en producción, que es justo lo que la sigma debe medir.
+
+        Devuelve un vector alineado con las filas de entrada (NaN en el primer
+        tramo, que no tiene pasado con el que predecirse), o None si no hay
+        datos suficientes.
+        """
+        n = len(y)
+        if n < MIN_FILAS_OOF:
+            return None
+
+        orden = np.argsort(fechas, kind='stable')
+        Xo, yo = X[orden], y[orden]
+
+        cortes = np.linspace(0, n, N_TRAMOS_SIGMA + 1).astype(int)
+        resid_ord = np.full(n, np.nan)
+
+        for t in range(1, N_TRAMOS_SIGMA):
+            fin_train = cortes[t]
+            ini_test, fin_test = cortes[t], cortes[t + 1]
+            if fin_train < 500 or fin_test <= ini_test:
+                continue
+            m = self._nuevo_estimador()
+            m.fit(Xo[:fin_train], yo[:fin_train])
+            resid_ord[ini_test:fin_test] = (
+                yo[ini_test:fin_test] - m.predict(Xo[ini_test:fin_test])
+            )
+
+        # Deshacer la ordenación para volver al orden original de las filas.
+        resid = np.full(n, np.nan)
+        resid[orden] = resid_ord
+        return resid if np.isfinite(resid).sum() >= 500 else None
+
     # ── Entrenamiento ──
     def entrenar(self, gamelogs: dict, cutoff_date) -> dict:
         data = self.construir_dataset(gamelogs, cutoff_date)
@@ -77,19 +142,26 @@ class ModeloPooled:
         X = data[cols].values
         y = data[TARGET].values
 
-        self.modelo = XGBRegressor(
-            n_estimators=300, learning_rate=0.05, max_depth=4,
-            subsample=0.8, colsample_bytree=0.8, min_child_weight=5,
-            reg_lambda=1.0, random_state=self.random_state, verbosity=0,
-        )
+        self.modelo = self._nuevo_estimador()
         self.modelo.fit(X, y)
         self._cols = cols
 
-        # Sigma empírico por bucket de minutos (ADR-008): residuos in-sample,
-        # segmentados por terciles de avg_MIN_num_L10.
-        preds = self.modelo.predict(X)
-        resid = y - preds
-        min_col = data['avg_MIN_num_L10'].values
+        # Sigma empírica por bucket de minutos (ADR-008), a partir de residuos
+        # FUERA DE MUESTRA. Si no se pueden calcular, se cae a los in-sample
+        # avisando: son optimistas y hay que saber que se están usando.
+        min_col_todo = data['avg_MIN_num_L10'].values
+        resid_oof = self._residuos_fuera_de_muestra(X, y, data['GAME_DATE'].values)
+
+        if resid_oof is not None:
+            usable = np.isfinite(resid_oof)
+            resid = resid_oof[usable]
+            min_col = min_col_todo[usable]
+            metodo = "out-of-fold"
+        else:
+            resid = y - self.modelo.predict(X)
+            min_col = min_col_todo
+            metodo = "in-sample (FALLBACK: sigma optimista)"
+
         self.sigma_global = float(np.std(resid))
         try:
             edges = np.quantile(min_col, [1/3, 2/3])
@@ -105,7 +177,8 @@ class ModeloPooled:
             self.sigma_buckets = None
 
         return {"n_filas": len(data), "n_features": len(cols),
-                "sigma_global": round(self.sigma_global, 2)}
+                "sigma_global": round(self.sigma_global, 2),
+                "sigma_metodo": metodo, "n_resid": int(len(resid))}
 
     def _sigma_para(self, avg_min: float) -> float:
         if self.sigma_buckets is None or not np.isfinite(avg_min):
