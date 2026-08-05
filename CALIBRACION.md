@@ -141,6 +141,47 @@ El modelo distingue de verdad sus predicciones buenas de las malas.
 Ha dejado de ser un set virgen: cualquier número adicional extraído de estos
 datos está contaminado.
 
+---
+
+## Cambios aplicados a partir de esto
+
+### 1. El gate se podía pasar por suerte
+
+Antes: 100 picks con 54 % de acierto. Con esa muestra el IC95 va de **44.2 % a
+63.8 %** — el break-even de 53.5 % cae en el medio. Se podía cruzar el gate, y
+empezar a apostar dinero real, estando en realidad en el 45 %.
+
+Ahora el criterio es que el **límite inferior del intervalo de Wilson supere el
+break-even**, más un suelo de 300 picks. Se ajusta solo: con más ventaja hace
+falta menos muestra.
+
+| Acierto observado | Picks necesarios |
+|---|---|
+| 62 % | 130 |
+| 60 % | 230 |
+| 58 % | 470 |
+| 56 % | 1 510 |
+| 55 % | 4 210 |
+| 54 % | 38 090 (o sea: no) |
+
+Se usa Wilson y no la aproximación normal porque con proporciones lejos de 0.5
+la normal da intervalos demasiado optimistas — justo el error que este gate
+existe para evitar.
+
+### 2. Faltaba un piso de convicción
+
+`min_edge = 0.08` equivale a prob ~57.8 % con cuota 1.87, dentro de la zona
+donde el sistema mide **por debajo** del break-even.
+
+Pero subir `min_edge` no era la solución correcta: `edge = prob × cuota − 1`,
+así que un mismo edge se alcanza con probabilidad alta y cuota mala o al revés.
+Lo que aguantó fuera de muestra fue el **ranking del modelo**, no el edge.
+
+Por eso se añade un filtro aparte, `min_prob = 0.65`, tomado directamente de lo
+medido. `min_edge` se mantiene como piso económico.
+
+---
+
 ## Siguiente paso
 
 Temporada 2026-27, desde octubre. Registrar con **umbral 0.65 prefijado**,

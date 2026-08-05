@@ -100,11 +100,27 @@ except ValueError:
 g = trk.estado_gate("PAPEL")
 # Con solo 2 picks resueltos (50% WR, ROI -33%), el gate NO debe aprobar.
 check("gate no aprueba con muestra chica", g["aprobado"] is False)
-check("gate criterio picks no cumplido (2 < 100)",
+check("gate criterio picks no cumplido (2 < min_picks)",
       g["criterios"]["picks"]["ok"] is False, f"got {g['criterios']['picks']}")
 check("gate reporta break-even ~53.5",
       abs(g["break_even_pct"] - 53.5) < 0.2, f"got {g['break_even_pct']}")
 
+
+# ── El agujero que tenía el gate: pasarse por suerte ──
+# Con 100 picks al 54 % el IC95 va de 44 % a 64 %: el break-even queda dentro,
+# así que ese resultado NO distingue un sistema con ventaja de uno sin ella.
+check("IC95: 100 picks al 54% no supera break-even",
+      trk._limite_inferior_wilson(54, 100) <= trk.BREAK_EVEN_PCT)
+# 600 y no 470: a 470 el intervalo cae justo en el borde (53.36 vs 53.5) y el
+# test dependería del redondeo, no de la lógica.
+check("IC95: 600 picks al 58% sí lo supera",
+      trk._limite_inferior_wilson(348, 600) > trk.BREAK_EVEN_PCT)
+check("IC95: más muestra estrecha el intervalo",
+      trk._limite_inferior_wilson(580, 1000) > trk._limite_inferior_wilson(58, 100))
+check("IC de Wilson nunca es negativo",
+      trk._limite_inferior_wilson(0, 10) >= 0.0)
+check("gate incluye el criterio de intervalo",
+      "ic_supera_break_even" in trk.estado_gate("PAPEL")["criterios"])
 # ── Limpieza ──
 if LEDGER_TEST.exists():
     LEDGER_TEST.unlink()

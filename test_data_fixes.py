@@ -4,6 +4,12 @@
 # ================================================
 
 import sys
+
+# La consola de Windows es cp1252 y revienta con las flechas de los
+# mensajes; el UnicodeEncodeError enmascaraba el resultado del test.
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
 import pandas as pd
 
 import module1_data_engine as m1

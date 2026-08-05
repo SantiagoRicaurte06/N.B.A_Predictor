@@ -34,10 +34,49 @@ BREAK_EVEN_PCT = round(1 / 1.87 * 100, 1)   # ≈ 53.5
 # que DEMOSTRAR ventaja real en papel — muestra suficiente, win rate por encima
 # del break-even y ROI positivo.
 GATE_PAPEL = {
-    "min_picks":    100,     # muestra mínima para tener señal, no ruido
+    # Suelo de muestra. El criterio que manda es el intervalo de confianza de
+    # abajo; este número solo evita que se evalúe con cuatro datos.
+    "min_picks":    300,
     "min_win_rate": 54.0,    # por encima del break-even (~53.5)
     "min_roi":      0.0,     # ROI positivo
+    # El criterio REAL: el límite inferior del IC al 95 % debe superar el
+    # break-even. Es lo que distingue "voy ganando" de "voy ganando de verdad".
+    "confianza":    0.95,
 }
+
+# POR QUÉ NO BASTA CON min_picks Y min_win_rate
+# ---------------------------------------------
+# La versión anterior pedía 100 picks con 54 % de acierto. Con esa muestra el
+# intervalo de confianza al 95 % es [44.2 %, 63.8 %]: el break-even de 53.5 %
+# cae justo en el medio. Se podía cruzar el gate —y empezar a apostar dinero
+# real— estando en realidad en el 45 %.
+#
+# Cuánta muestra hace falta de verdad, para que el límite inferior supere el
+# break-even:
+#     acierto observado 58 %  ->  ~460 picks
+#     acierto observado 56 %  -> ~1 500 picks
+#     acierto observado 54 %  ->  no alcanza nunca de forma razonable
+#
+# Por eso el gate ya no compara contra un número fijo: calcula el intervalo y
+# exige que su suelo esté por encima del break-even. Así se ajusta solo — con
+# más ventaja, menos muestra necesaria.
+
+
+def _limite_inferior_wilson(exitos: int, n: int, z: float = 1.96) -> float:
+    """
+    Límite inferior del intervalo de Wilson, en porcentaje.
+
+    Se usa Wilson y no la aproximación normal porque con muestras pequeñas o
+    proporciones lejos de 0.5 la normal da intervalos demasiado optimistas —
+    justo el error que este gate existe para evitar.
+    """
+    if n <= 0:
+        return 0.0
+    p = exitos / n
+    denom = 1 + z**2 / n
+    centro = p + z**2 / (2 * n)
+    margen = z * ((p * (1 - p) / n + z**2 / (4 * n**2)) ** 0.5)
+    return max(0.0, (centro - margen) / denom) * 100
 
 
 # ─────────────────────────────────────────────
@@ -258,15 +297,26 @@ def estado_gate(modo: str = "PAPEL", gate: dict | None = None) -> dict:
     wr  = m.get("win_rate", 0.0)
     roi = m.get("roi_pct", 0.0)
 
+    # Suelo del intervalo de confianza: la ventaja tiene que ser distinguible
+    # del azar, no solo estar por encima en el promedio observado.
+    exitos = int(round(n * wr / 100.0))
+    ic_bajo = _limite_inferior_wilson(exitos, n)
+
     criterios = {
         "picks":    {"actual": n,  "meta": gate["min_picks"],    "ok": n  >= gate["min_picks"]},
         "win_rate": {"actual": wr, "meta": gate["min_win_rate"], "ok": wr >= gate["min_win_rate"]},
         "roi":      {"actual": roi,"meta": gate["min_roi"],      "ok": roi >= gate["min_roi"]},
+        "ic_supera_break_even": {
+            "actual": round(ic_bajo, 1),
+            "meta":   BREAK_EVEN_PCT,
+            "ok":     ic_bajo > BREAK_EVEN_PCT,
+        },
     }
     return {
         "criterios": criterios,
         "aprobado": all(c["ok"] for c in criterios.values()),
         "break_even_pct": BREAK_EVEN_PCT,
+        "ic_inferior_pct": round(ic_bajo, 1),
         "progreso_picks": round(min(n / gate["min_picks"], 1.0), 3) if gate["min_picks"] else 0.0,
     }
 
