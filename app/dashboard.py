@@ -12,24 +12,18 @@ from datetime import datetime
 
 # Módulos del sistema
 import sys
-sys.path.append(str(Path(__file__).parent))
+sys.path.append(str(Path(__file__).resolve().parent.parent))
 
-from module1_data_engine import cargar_todos_los_datos
-from module9_pooled_model import generar_predicciones_pooled
-from module3_stakes_engine import (
+from nba_predictor.datos.fuente_nba import cargar_todos_los_datos
+from nba_predictor.modelo.pooled import generar_predicciones_pooled
+from nba_predictor.apuestas.stakes import (
     generar_stakes, cargar_bankroll,
     calcular_estadisticas_historial, PARAMS,
 )
-import module8_tracking as trk
-from module5_error_analysis import (
+import nba_predictor.seguimiento.ledger as trk
+from nba_predictor.seguimiento.diagnostico import (
     ejecutar_analisis_completo,
     PATRONES_FILE,
-)
-from module6_odds_engine import (
-    get_odds_props,
-    get_api_key,
-    set_api_key,
-    buscar_jugador_en_props
 )
 # ─────────────────────────────────────────────
 # CONFIGURACIÓN DE LA APP
@@ -133,19 +127,6 @@ with st.sidebar:
     )
 
     st.markdown("---")
-    st.markdown("### 🔑 Odds API")
-    odds_key_actual = get_api_key()
-    nueva_key = st.text_input(
-        "API Key (the-odds-api.com)",
-        value=odds_key_actual if odds_key_actual else "",
-        type="password",
-        help="Obtén una key gratis en the-odds-api.com (500 requests/mes)"
-    )
-    if nueva_key and nueva_key != odds_key_actual:
-        set_api_key(nueva_key)
-        st.success("✅ API Key guardada")
-
-    st.markdown("---")
     st.markdown("### 🏠 Casa de apuestas")
     st.info("**Betano** — Odds decimales")
 
@@ -182,7 +163,7 @@ with col_h1:
     </h1>
     <p style='color:#5a7a9a;font-family:DM Mono,monospace;font-size:12px;
               letter-spacing:2px;text-transform:uppercase;'>
-        Props · Totales · Spread · Kelly Stakes · Betano
+        Props de puntos · Kelly Stakes · Betano
     </p>
     """, unsafe_allow_html=True)
 
@@ -202,7 +183,7 @@ st.markdown("---")
 # TABS PRINCIPALES
 # ─────────────────────────────────────────────
 
-# Totales & Spread fuera de alcance v1 (ADR-001) — el código queda latente en module2.
+# Solo props de puntos (ADR-001).
 tab_picks, tab_lineas, tab_historial, tab_paper, tab_bankroll, tab_analisis = st.tabs([
     "🎯 Picks del Día",
     "📥 Ingresar Líneas",
@@ -351,44 +332,6 @@ with tab_lineas:
     st.markdown("### 📥 Ingresa las líneas de Betano")
     st.caption("Ingresa las odds decimales y líneas para los jugadores disponibles hoy.")
 
-    # ── BOTÓN CARGAR ODDS AUTOMÁTICAMENTE ──
-    api_key = get_api_key()
-    if not api_key:
-        st.info("""
-        🔑 **Configura tu API Key de The Odds API**
-
-        Obtén una key gratis en [the-odds-api.com](https://the-odds-api.com)
-        - 500 requests gratis por mes
-        - Datos en tiempo real de Betano y otras casas
-        - Configúrala en el sidebar ←
-        """)
-    else:
-        if st.button("⚡ Cargar Odds Automáticamente desde Betano", use_container_width=True):
-            with st.spinner("Conectando a The Odds API y obteniendo líneas..."):
-                try:
-                    odds_data = get_odds_props()
-                    if odds_data:
-                        st.session_state['odds_automaticas'] = odds_data
-                        st.success(f"✅ {len(odds_data)} líneas de odds cargadas")
-                        st.rerun()
-                    else:
-                        st.warning("""
-                        ⚠️ **No se encontraron player props disponibles**
-
-                        El plan gratuito de The Odds API incluye:
-                        - Spreads (líneas de partido)
-                        - Totals (over/under de puntos del partido)
-                        - Moneylines (quién gana)
-
-                        **Los player props (PTS/REB/AST por jugador) requieren un plan de pago.**
-
-                        💡 Opciones:
-                        1. Ingresa las líneas manualmente abajo
-                        2. Usa la API de Betano directamente si tienes acceso
-                        """)
-                except Exception as e:
-                    st.error(f"Error al obtener odds: {e}")
-
     if st.session_state.predicciones is None:
         st.warning("Primero carga los datos en la pestaña **Picks del Día**")
     else:
@@ -398,9 +341,6 @@ with tab_lineas:
         # Agrupar por jugador
         jugadores_pred = list(set(p['jugador'] for p in predicciones))
         jugadores_pred.sort()
-
-        # Recuperar odds automáticas si existen
-        odds_auto = st.session_state.get('odds_automaticas', {})
 
         for jugador in jugadores_pred:
             preds_jugador = [p for p in predicciones if p['jugador'] == jugador]
@@ -412,36 +352,11 @@ with tab_lineas:
                     mae    = pred.get('mae', 0)
                     pred_val = pred.get('prediccion', avg)
 
-                    # Buscar odds automáticas para este jugador+target
-                    key_busqueda = f"{jugador}_{target}"
-                    odds_match = None
-                    if odds_auto:
-                        # Buscar por coincidencia exacta o por nombre parcial
-                        for key_auto, datos_auto in odds_auto.items():
-                            if key_auto == key_busqueda:
-                                odds_match = datos_auto
-                                break
-                            # Buscar por nombre parcial (sin el _PTS/_REB/_AST)
-                            if target in ['PTS', 'REB', 'AST']:
-                                nombre_key = f"{jugador}_{target}"
-                                if key_auto == nombre_key:
-                                    odds_match = datos_auto
-                                    break
-
-                    # Valores por defecto: automáticos si hay, sino manuales
                     linea_default = float(avg)
                     odds_over_default = 1.87
                     odds_under_default = 1.87
 
-                    if odds_match:
-                        linea_default = float(odds_match.get('linea', avg))
-                        odds_over_default = float(odds_match.get('odds_over', 1.87))
-                        odds_under_default = float(odds_match.get('odds_under', 1.87))
-                        badge = " 📡"  # Indicador de odds automáticas
-                    else:
-                        badge = ""
-
-                    st.markdown(f"**{target}** — Modelo predice: `{pred_val}` | Promedio L10: `{avg}` | MAE: ±`{mae}`{badge}")
+                    st.markdown(f"**{target}** — Modelo predice: `{pred_val}` | Promedio L10: `{avg}` | MAE: ±`{mae}`")
 
                     col_l, col_o, col_u = st.columns(3)
                     with col_l:
@@ -482,9 +397,6 @@ with tab_lineas:
                 st.session_state.bankroll = estado_bk
                 st.success(f"✅ {len(picks)} picks con valor generados — ve a **Picks del Día**")
                 st.rerun()
-
-# NOTA: la pestaña "Totales & Spread" se retiró en v1 (ADR-001). Las funciones
-# predecir_total_poisson / predecir_spread siguen en module2 como código latente.
 
 # ════════════════════════════════════════════
 # TAB 4: HISTORIAL

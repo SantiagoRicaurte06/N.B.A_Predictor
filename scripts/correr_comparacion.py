@@ -11,8 +11,8 @@
 import sys
 from datetime import datetime
 
-import module7_backtest_engine as bt
-import module9_pooled_model as mp
+import nba_predictor.backtest.walk_forward as bt
+import nba_predictor.modelo.pooled as mp
 
 SEASONS = ["2024-25", "2025-26"]
 MAX_TEST = 4
@@ -134,9 +134,9 @@ Ambos modelos evaluados sobre los **mismos** puntos de test (ventana temporal
 > ⚠️ ROI con línea sintética = consistencia interna, no rentabilidad real.
 > La rentabilidad se valida en paper trading (ADR-003).
 """
-    with open("comparacion.md", "w", encoding="utf-8") as f:
+    with open("docs/comparacion.md", "w", encoding="utf-8") as f:
         f.write(md)
-    print("\n  💾 comparacion.md escrito")
+    print("\n  💾 docs/comparacion.md escrito")
 
 
 if __name__ == "__main__":

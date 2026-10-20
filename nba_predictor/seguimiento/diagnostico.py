@@ -36,7 +36,7 @@ def cargar_historial() -> pd.DataFrame | None:
     verdad, ADR-007) y los mapea al formato que esperan los analizadores.
     Solo considera picks con resultado W o L (VOID se excluye del análisis).
     """
-    import module8_tracking as trk
+    import nba_predictor.seguimiento.ledger as trk
 
     ledger = trk._cargar_ledger()
     if ledger.empty:

@@ -46,14 +46,7 @@ jobs:
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
           if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
           if [ -f pyproject.toml ]; then pip install -e ".[dev]" 2>/dev/null || pip install -e .; fi
-          # Los test_*.py del repo son scripts autocontenidos (sys.exit), no pruebas de pytest.
-          fallos=0
-          for t in test_*.py; do
-            echo "::group::$t"
-            python "$t" || { echo "::error::$t falló"; fallos=1; }
-            echo "::endgroup::"
-          done
-          exit $fallos
+          pytest
 
       - name: Go
         if: hashFiles('go.mod') != ''

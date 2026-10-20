@@ -9,7 +9,7 @@
 
 from datetime import datetime
 
-import module8_tracking as trk
+import nba_predictor.seguimiento.ledger as trk
 
 # ─────────────────────────────────────────────
 # CONFIGURACIÓN DE RIESGO — fuente única (PARAMS)
@@ -289,101 +289,6 @@ def analizar_pick_prop(prediccion_resultado: dict,
         'timestamp':          datetime.now().isoformat()
     }
 
-
-def analizar_pick_total(total_resultado: dict,
-                         odds_over: float,
-                         odds_under: float,
-                         bankroll: float,
-                         home_team: str,
-                         away_team: str) -> dict | None:
-    """Analiza picks de totales O/U."""
-    prob_over  = total_resultado['prob_over']
-    prob_under = total_resultado['prob_under']
-    linea      = total_resultado['linea']
-
-    edge_over  = calcular_edge(prob_over, odds_over)
-    edge_under = calcular_edge(prob_under, odds_under)
-
-    if edge_over >= edge_under and edge_over >= MIN_EDGE:
-        lado, prob, odds, edge = 'OVER', prob_over, odds_over, edge_over
-    elif edge_under > edge_over and edge_under >= MIN_EDGE:
-        lado, prob, odds, edge = 'UNDER', prob_under, odds_under, edge_under
-    else:
-        return None
-
-    kelly_pct = kelly_criterion(prob, odds)
-    stake = calcular_stake_usd(kelly_pct, bankroll, 'MEDIA')
-    if stake <= 0:
-        return None
-
-    return {
-        'jugador':            f'{home_team} vs {away_team}',
-        'mercado':            'TOTAL',
-        'tipo':               f'TOTAL {lado} {linea}',
-        'lado':               lado,
-        'linea':              linea,
-        'prediccion_modelo':  total_resultado['total_esperado'],
-        'mae':                None,
-        'prob_modelo':        round(prob, 3),
-        'odds':               odds,
-        'edge_pct':           round(edge * 100, 1),
-        'kelly_pct':          round(kelly_pct * 100, 2),
-        'stake_usd':          stake,
-        'ganancia_potencial': round(stake * (odds - 1), 2),
-        'confianza':          'MEDIA',
-        'es_gtd':             False,
-        'ajustado_ausencias': False,
-        'ajustes_ausencias':  [],
-        'timestamp':          datetime.now().isoformat()
-    }
-
-
-def analizar_pick_spread(spread_resultado: dict,
-                          odds_home: float,
-                          odds_away: float,
-                          bankroll: float,
-                          home_team: str,
-                          away_team: str) -> dict | None:
-    """Analiza picks de spread/handicap."""
-    prob_home = spread_resultado['prob_home_cover']
-    prob_away = spread_resultado['prob_away_cover']
-    linea     = spread_resultado['linea_spread']
-
-    edge_home = calcular_edge(prob_home, odds_home)
-    edge_away = calcular_edge(prob_away, odds_away)
-
-    if edge_home >= edge_away and edge_home >= MIN_EDGE:
-        lado, prob, odds, edge = home_team, prob_home, odds_home, edge_home
-    elif edge_away > edge_home and edge_away >= MIN_EDGE:
-        lado, prob, odds, edge = away_team, prob_away, odds_away, edge_away
-    else:
-        return None
-
-    kelly_pct = kelly_criterion(prob, odds)
-    stake = calcular_stake_usd(kelly_pct, bankroll, 'MEDIA')
-    if stake <= 0:
-        return None
-
-    return {
-        'jugador':            f'{home_team} vs {away_team}',
-        'mercado':            'SPREAD',
-        'tipo':               f'SPREAD {lado} {linea:+.1f}',
-        'lado':               lado,
-        'linea':              linea,
-        'prediccion_modelo':  spread_resultado['margen_esperado'],
-        'mae':                None,
-        'prob_modelo':        round(prob, 3),
-        'odds':               odds,
-        'edge_pct':           round(edge * 100, 1),
-        'kelly_pct':          round(kelly_pct * 100, 2),
-        'stake_usd':          stake,
-        'ganancia_potencial': round(stake * (odds - 1), 2),
-        'confianza':          'MEDIA',
-        'es_gtd':             False,
-        'ajustado_ausencias': False,
-        'ajustes_ausencias':  [],
-        'timestamp':          datetime.now().isoformat()
-    }
 
 # ─────────────────────────────────────────────
 # 4. HISTORIAL DE APUESTAS — vía ledger de module8

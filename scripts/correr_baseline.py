@@ -17,7 +17,7 @@
 import sys
 from datetime import datetime
 
-import module7_backtest_engine as bt
+import nba_predictor.backtest.walk_forward as bt
 
 MAX_TEST_DEFAULT = 4
 SEASONS = ["2024-25", "2025-26"]
@@ -86,9 +86,9 @@ El modelo pooled debe **superar esta línea base** en:
 > ⚠️ El ROI usa línea sintética, no real: mide *consistencia interna* del modelo,
 > no rentabilidad real. La rentabilidad se valida en paper trading (ADR-003).
 """
-    with open("baseline.md", "w", encoding="utf-8") as f:
+    with open("docs/baseline.md", "w", encoding="utf-8") as f:
         f.write(contenido)
-    print("\n  💾 baseline.md escrito")
+    print("\n  💾 docs/baseline.md escrito")
 
 
 def main():
