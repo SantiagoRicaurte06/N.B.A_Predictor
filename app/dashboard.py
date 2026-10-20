@@ -182,7 +182,7 @@ with col_h1:
     </h1>
     <p style='color:#5a7a9a;font-family:DM Mono,monospace;font-size:12px;
               letter-spacing:2px;text-transform:uppercase;'>
-        Props · Totales · Spread · Kelly Stakes · Betano
+        Props de puntos · Kelly Stakes · Betano
     </p>
     """, unsafe_allow_html=True)
 
@@ -202,7 +202,7 @@ st.markdown("---")
 # TABS PRINCIPALES
 # ─────────────────────────────────────────────
 
-# Totales & Spread fuera de alcance v1 (ADR-001) — el código queda latente en module2.
+# Solo props de puntos (ADR-001).
 tab_picks, tab_lineas, tab_historial, tab_paper, tab_bankroll, tab_analisis = st.tabs([
     "🎯 Picks del Día",
     "📥 Ingresar Líneas",
@@ -482,9 +482,6 @@ with tab_lineas:
                 st.session_state.bankroll = estado_bk
                 st.success(f"✅ {len(picks)} picks con valor generados — ve a **Picks del Día**")
                 st.rerun()
-
-# NOTA: la pestaña "Totales & Spread" se retiró en v1 (ADR-001). Las funciones
-# predecir_total_poisson / predecir_spread siguen en module2 como código latente.
 
 # ════════════════════════════════════════════
 # TAB 4: HISTORIAL

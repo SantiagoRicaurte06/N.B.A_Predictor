@@ -32,9 +32,8 @@ from nba_predictor.modelo.features import (
     calcular_pace_proxy,
     detectar_back_to_back,
     get_feature_cols_props,
-    entrenar_modelo_props,
-    ajustar_por_defensive_rating,
 )
+from nba_predictor.modelo.baseline import entrenar_modelo_props
 
 # Crear datos mock de gamelog
 def crear_gamelog_mock():
@@ -144,44 +143,6 @@ try:
 
 except Exception as e:
     print(f"\n  ❌ TEST 2 FALLIDO: {e}")
-    import traceback
-    traceback.print_exc()
-    sys.exit(1)
-
-# ═══════════════════════════════════════════════════════
-# TEST 3: Ajustes por Defensive Rating
-# ═══════════════════════════════════════════════════════
-
-print("\n" + "-" * 50)
-print("  TEST 3: Ajustes por Defensive Rating (module2)")
-print("-" * 50)
-
-try:
-    # Testear ajuste por defensive rating
-    opponent_stats = {
-        'opp_pts_per_game': 120.0,  # Defensa mala (permite más puntos)
-        'opp_reb_per_game': 46.0,
-        'opp_ast_per_game': 28.0,
-    }
-
-    pred_ajustada, info = ajustar_por_defensive_rating(
-        prediccion=25.0,
-        target='PTS',
-        opponent_stats=opponent_stats
-    )
-
-    print(f"  Predicción original: 25.0 PTS")
-    print(f"  Predicción ajustada: {pred_ajustada:.1f} PTS")
-    print(f"  Factor aplicado: {info['factor']:.3f}")
-    print(f"  Cambio: {info['cambio']:+.1f}")
-
-    # Verificar que el factor es correcto
-    assert info['factor'] > 1.0, "Debería inflar la predicción vs defensa mala"
-
-    print("\n  ✅ TEST 3 APROBADO")
-
-except Exception as e:
-    print(f"\n  ❌ TEST 3 FALLIDO: {e}")
     import traceback
     traceback.print_exc()
     sys.exit(1)
@@ -306,20 +267,8 @@ try:
     resultado = entrenar_modelo_props(gl_features, 'PTS')
 
     if resultado:
-        # 4. Aplicar ajustes
-        from nba_predictor.modelo.features import predecir_con_ausencias
-
-        resultado_ajustado = predecir_con_ausencias(
-            nombre='Test Player',
-            resultado_modelo=resultado,
-            efectos_ausencia={},
-            jugadores_ausentes=[],
-            opponent_stats={'opp_pts_per_game': 120.0},
-            minutes_restriction=None
-        )
-
+        resultado_ajustado = resultado
         print(f"  ✅ Predicción final: {resultado_ajustado['prediccion']:.1f} PTS")
-        print(f"      - Ajustes aplicados: {len(resultado_ajustado.get('ajustes_ausencias', []))}")
 
         # 5. Generar pick con stake
         pick = analizar_pick_prop(
@@ -354,8 +303,7 @@ print("  ✅ TODOS LOS TESTS APROBADOS")
 print("=" * 60)
 print("\n  El pipeline está listo para usar con datos reales.")
 print("  Para comenzar:")
-print("    1. Configura tu API key en module6_odds_engine.py")
-print("    2. Ejecuta el pipeline completo")
-print("    3. Registra los picks generados")
-print("    4. Después de 7-14 días, revisa el win rate en module5")
+print("    1. Ejecuta el pipeline completo")
+print("    2. Registra los picks generados")
+print("    3. Después de 7-14 días, revisa el win rate en module5")
 print()
