@@ -1,309 +1,97 @@
-# ================================================
-#  NBA PREDICTOR — TEST TÉCNICO DEL PIPELINE
-#  Verifica que todos los módulos funcionen
-#  con datos mock antes de usar datos reales.
-# ================================================
+"""
+Pipeline con datos simulados: features → modelo por jugador → pick con stake.
+Comprueba sobre todo que el lado del pick (OVER/UNDER) siga a la predicción.
+"""
 
-import sys
-import pandas as pd
+from datetime import datetime
+
 import numpy as np
-from datetime import datetime, timedelta
-
-# Semilla fija: el pipeline usa datos mock aleatorios; sin semilla, tests como
-# el de integración eran no-deterministas (a veces generaban pick, a veces no).
-np.random.seed(42)
-
-print("=" * 60)
-print("  [TEST] TEST TECNICO — NBA PREDICTOR PIPELINE")
-print("=" * 60)
-
-# ═══════════════════════════════════════════════════════
-# TEST 1: Module 2 — Feature Engineering
-# ═══════════════════════════════════════════════════════
-
-print("\n" + "-" * 50)
-print("  TEST 1: Feature Engineering (module2)")
-print("-" * 50)
-
-from nba_predictor.modelo.features import (
-    build_player_features,
-    calcular_usage_rate,
-    calcular_rebound_rate,
-    calcular_pace_proxy,
-    detectar_back_to_back,
-    get_feature_cols_props,
-)
-from nba_predictor.modelo.baseline import entrenar_modelo_props
-
-# Crear datos mock de gamelog
-def crear_gamelog_mock():
-    """Crea un gamelog fake con todas las columnas necesarias."""
-    n_games = 20
-    dates = pd.date_range(end=datetime.now(), periods=n_games, freq='2D')
-
-    df = pd.DataFrame({
-        'GAME_DATE': dates,
-        'PTS': np.random.randint(15, 35, n_games),
-        'REB': np.random.randint(5, 15, n_games),
-        'AST': np.random.randint(3, 12, n_games),
-        'STL': np.random.randint(0, 3, n_games),
-        'BLK': np.random.randint(0, 3, n_games),
-        'TOV': np.random.randint(1, 5, n_games),
-        'FGA': np.random.randint(10, 25, n_games),
-        'FGM': np.random.randint(5, 15, n_games),
-        'FG3A': np.random.randint(2, 10, n_games),
-        'FG3M': np.random.randint(1, 5, n_games),
-        'FTA': np.random.randint(3, 10, n_games),
-        'FTM': np.random.randint(2, 8, n_games),
-        'OREB': np.random.randint(1, 5, n_games),
-        'DREB': np.random.randint(3, 10, n_games),
-        'TEAM_FGA': np.random.randint(70, 90, n_games),
-        'TEAM_REB': np.random.randint(40, 50, n_games),
-        'TEAM_OREB': np.random.randint(8, 15, n_games),
-        'TEAM_DREB': np.random.randint(30, 40, n_games),
-        'MIN': [f"{np.random.randint(25, 40)}:00" for _ in range(n_games)],
-        'MATCHUP': ['vs. LAL' if i % 2 == 0 else '@ GSW' for i in range(n_games)],
-        'WL': ['W' if i % 2 == 0 else 'L' for i in range(n_games)],
-    })
-    return df
-
-try:
-    gl_mock = crear_gamelog_mock()
-    print(f"  ✅ Datos mock creados: {len(gl_mock)} juegos")
-
-    # Testear build_player_features
-    gl_features = build_player_features(gl_mock.copy())
-
-    features_esperadas = [
-        'avg_PTS_L10', 'trend_PTS', 'avg_pace_L10', 'avg_usage_L10',
-        'is_b2b', 'b2b_last_5', 'avg_minutes_restriction_L3',
-        'avg_off_reb_rate_L10', 'avg_def_reb_rate_L10'
-    ]
-
-    features_encontradas = [f for f in features_esperadas if f in gl_features.columns]
-    print(f"  ✅ Features generadas: {len(features_encontradas)}/{len(features_esperadas)}")
-
-    for f in features_esperadas:
-        if f in gl_features.columns:
-            print(f"      ✓ {f}")
-        else:
-            print(f"      ✗ {f} — FALTA!")
-
-    # Testear funciones auxiliares
-    print("\n  Funciones auxiliares:")
-
-    # Usage rate
-    row_mock = gl_mock.iloc[-1]
-    usage = calcular_usage_rate(row_mock)
-    print(f"    ✓ Usage rate: {usage:.3f} (esperado: 0.15-0.35)")
-
-    # Rebound rate
-    reb_off = calcular_rebound_rate(row_mock, is_offensive=True)
-    reb_def = calcular_rebound_rate(row_mock, is_offensive=False)
-    print(f"    ✓ Rebound rate: OFF={reb_off:.3f}, DEF={reb_def:.3f}")
-
-    # Pace
-    pace = calcular_pace_proxy(gl_mock)
-    print(f"    ✓ Pace promedio: {pace.mean():.1f} (esperado: 90-110)")
-
-    # Back-to-back
-    b2b = detectar_back_to_back(gl_mock)
-    print(f"    ✓ B2B detectados: {b2b.sum()} (esperado: 0 con freq=2D)")
-
-    print("\n  ✅ TEST 1 APROBADO")
-
-except Exception as e:
-    print(f"\n  ❌ TEST 1 FALLIDO: {e}")
-    import traceback
-    traceback.print_exc()
-    sys.exit(1)
-
-# ═══════════════════════════════════════════════════════
-# TEST 2: Module 2 — Modelo de Predicción
-# ═══════════════════════════════════════════════════════
-
-print("\n" + "-" * 50)
-print("  TEST 2: Entrenamiento de Modelo (module2)")
-print("-" * 50)
-
-try:
-    # Entrenar modelo para PTS
-    resultado = entrenar_modelo_props(gl_features, 'PTS')
-
-    if resultado is None:
-        print("  ⚠️  Modelo no pudo entrenar (insuficientes datos)")
-    else:
-        print(f"  ✅ Modelo entrenado: {resultado['n_juegos']} juegos")
-        print(f"      - Predicción: {resultado['prediccion']:.1f} PTS")
-        print(f"      - MAE: {resultado['mae']:.2f}")
-        print(f"      - Confianza: {resultado['confianza']}")
-        print(f"      - Features usadas: {len(resultado['feature_cols'])}")
-
-    print("\n  ✅ TEST 2 APROBADO")
-
-except Exception as e:
-    print(f"\n  ❌ TEST 2 FALLIDO: {e}")
-    import traceback
-    traceback.print_exc()
-    sys.exit(1)
-
-# ═══════════════════════════════════════════════════════
-# TEST 4: Module 3 — Stakes Engine
-# ═══════════════════════════════════════════════════════
-
-print("\n" + "-" * 50)
-print("  TEST 4: Stakes Engine (module3)")
-print("-" * 50)
+import pandas as pd
+import pytest
 
 from nba_predictor.apuestas.stakes import (
+    analizar_pick_prop,
     calcular_edge,
     kelly_criterion,
-    analizar_pick_prop,
-    cargar_bankroll,
+)
+from nba_predictor.modelo.baseline import entrenar_modelo_props
+from nba_predictor.modelo.features import (
+    build_player_features,
+    detectar_back_to_back,
 )
 
-try:
-    # Testear cálculo de edge
-    edge = calcular_edge(prob_modelo=0.55, odds_decimal=1.91)
-    print(f"  Edge con 55% prob @ 1.91: {edge*100:.1f}% (esperado: ~4.5%)")
 
-    # Testear Kelly
-    kelly = kelly_criterion(prob_modelo=0.55, odds_decimal=1.91)
-    print(f"  Kelly criterion: {kelly*100:.2f}% del bankroll")
+@pytest.fixture
+def gamelog():
+    rng = np.random.default_rng(42)
+    n = 20
+    return pd.DataFrame({
+        'GAME_DATE': pd.date_range(end=datetime(2026, 3, 1), periods=n, freq='2D'),
+        'PTS': rng.integers(15, 35, n),
+        'REB': rng.integers(5, 15, n),
+        'AST': rng.integers(3, 12, n),
+        'STL': rng.integers(0, 3, n),
+        'BLK': rng.integers(0, 3, n),
+        'TOV': rng.integers(1, 5, n),
+        'FGA': rng.integers(10, 25, n),
+        'FGM': rng.integers(5, 15, n),
+        'FG3A': rng.integers(2, 10, n),
+        'FG3M': rng.integers(1, 5, n),
+        'FTA': rng.integers(3, 10, n),
+        'FTM': rng.integers(2, 8, n),
+        'OREB': rng.integers(1, 5, n),
+        'DREB': rng.integers(3, 10, n),
+        'MIN': [f"{m}:00" for m in rng.integers(25, 40, n)],
+        'MATCHUP': ['vs. LAL' if i % 2 == 0 else '@ GSW' for i in range(n)],
+        'WL': ['W' if i % 2 == 0 else 'L' for i in range(n)],
+    })
 
-    # Testear análisis completo de pick
-    resultado_modelo = {
-        'jugador': 'Test Player',
-        'target': 'PTS',
-        'prediccion': 28.0,
-        'mae': 4.0,
-        'std_historico': 5.0,
-        'confianza': 'ALTA',
-        'es_gtd': False,
-        'avg_historico': 24.0,
-    }
 
-    pick = analizar_pick_prop(
-        resultado_modelo,
-        linea_casa=24.5,
-        odds_over=1.91,
-        odds_under=1.87,
-        bankroll=300.0
-    )
+def pred(prediccion, std=4.0, avg=25.0):
+    return {'jugador': 'Test', 'target': 'PTS', 'prediccion': prediccion,
+            'mae': 4.0, 'std_historico': std, 'confianza': 'ALTA',
+            'es_gtd': False, 'avg_historico': avg}
 
-    if pick:
-        print(f"  ✅ Pick generado:")
-        print(f"      - Jugador: {pick['jugador']}")
-        print(f"      - Tipo: {pick['tipo']}")
-        print(f"      - Edge: {pick['edge_pct']:.1f}%")
-        print(f"      - Stake: ${pick['stake_usd']:.2f}")
-        print(f"      - Ganancia potencial: ${pick['ganancia_potencial']:.2f}")
-    else:
-        print(f"  ⚠️  Sin pick (edge < 8%)")
 
-    # Testear lógica de dirección (CRÍTICO)
-    print("\n  Verificando lógica de dirección (CRÍTICO):")
+def test_features_usan_solo_partidos_anteriores(gamelog):
+    feats = build_player_features(gamelog)
+    for col in ['avg_PTS_L10', 'trend_PTS', 'is_b2b', 'rest_days', 'is_home']:
+        assert col in feats.columns
+    # El promedio del partido 5 sale de los partidos 0-4, nunca del propio.
+    esperado = gamelog['PTS'].iloc[:5].astype(float).mean()
+    assert feats['avg_PTS_L5'].iloc[5] == pytest.approx(esperado)
 
-    # Caso 1: Predicción > línea → OVER
-    pick_over = analizar_pick_prop(
-        {'jugador': 'Test', 'target': 'PTS', 'prediccion': 30.0, 'mae': 4.0,
-         'std_historico': 4.0, 'confianza': 'ALTA', 'es_gtd': False, 'avg_historico': 25.0},
-        linea_casa=24.5, odds_over=1.91, odds_under=1.87, bankroll=300
-    )
-    if pick_over and pick_over['lado'] == 'OVER':
-        print(f"    ✓ Predicción > línea → OVER (CORRECTO)")
-    else:
-        print(f"    ✗ Predicción > línea → {pick_over['lado'] if pick_over else 'None'} (ERROR!)")
 
-    # Caso 2: Predicción < línea → UNDER
-    pick_under = analizar_pick_prop(
-        {'jugador': 'Test', 'target': 'PTS', 'prediccion': 20.0, 'mae': 4.0,
-         'std_historico': 4.0, 'confianza': 'ALTA', 'es_gtd': False, 'avg_historico': 25.0},
-        linea_casa=25.5, odds_over=1.91, odds_under=1.87, bankroll=300
-    )
-    if pick_under and pick_under['lado'] == 'UNDER':
-        print(f"    ✓ Predicción < línea → UNDER (CORRECTO)")
-    else:
-        print(f"    ✗ Predicción < línea → {pick_under['lado'] if pick_under else 'None'} (ERROR!)")
+def test_back_to_back_se_detecta_por_fechas():
+    df = pd.DataFrame({'GAME_DATE': ['2026-01-01', '2026-01-02', '2026-01-05']})
+    assert detectar_back_to_back(df).tolist() == [False, True, False]
 
-    # Caso 3: Predicción muy cerca → None
-    pick_cerca = analizar_pick_prop(
-        {'jugador': 'Test', 'target': 'PTS', 'prediccion': 25.0, 'mae': 4.0,
-         'std_historico': 5.0, 'confianza': 'MEDIA', 'es_gtd': False, 'avg_historico': 25.0},
-        linea_casa=25.5, odds_over=1.91, odds_under=1.87, bankroll=300
-    )
-    if pick_cerca is None:
-        print(f"    ✓ Predicción ≈ línea → Sin pick (CORRECTO)")
-    else:
-        print(f"    ✗ Predicción ≈ línea → {pick_cerca['lado']} (ERROR!)")
 
-    print("\n  ✅ TEST 4 APROBADO")
+def test_modelo_por_jugador_predice_un_valor_razonable(gamelog):
+    r = entrenar_modelo_props(gamelog, 'PTS')
+    assert r is not None
+    assert 5 < r['prediccion'] < 45
 
-except Exception as e:
-    print(f"\n  ❌ TEST 4 FALLIDO: {e}")
-    import traceback
-    traceback.print_exc()
-    sys.exit(1)
 
-# ═══════════════════════════════════════════════════════
-# TEST 5: Integración Completa
-# ═══════════════════════════════════════════════════════
+def test_edge_y_kelly():
+    assert calcular_edge(0.55, 1.91) == pytest.approx(0.0505, abs=1e-3)
+    assert kelly_criterion(0.55, 1.91) > 0
+    assert kelly_criterion(0.45, 1.91) == 0
 
-print("\n" + "-" * 50)
-print("  TEST 5: Integración Completa")
-print("-" * 50)
 
-try:
-    # Simular pipeline completo
-    print("  Simulando pipeline completo...")
+def test_prediccion_sobre_la_linea_da_over():
+    pick = analizar_pick_prop(pred(32.0), linea_casa=24.5,
+                              odds_over=1.91, odds_under=1.87, bankroll=300)
+    assert pick is not None and pick['lado'] == 'OVER'
 
-    # 1. Crear datos mock
-    gl_mock = crear_gamelog_mock()
 
-    # 2. Generar features
-    gl_features = build_player_features(gl_mock)
+def test_prediccion_bajo_la_linea_da_under():
+    pick = analizar_pick_prop(pred(18.0), linea_casa=25.5,
+                              odds_over=1.91, odds_under=1.87, bankroll=300)
+    assert pick is not None and pick['lado'] == 'UNDER'
 
-    # 3. Entrenar modelo
-    resultado = entrenar_modelo_props(gl_features, 'PTS')
 
-    if resultado:
-        resultado_ajustado = resultado
-        print(f"  ✅ Predicción final: {resultado_ajustado['prediccion']:.1f} PTS")
-
-        # 5. Generar pick con stake
-        pick = analizar_pick_prop(
-            resultado_ajustado,
-            linea_casa=24.5,
-            odds_over=1.91,
-            odds_under=1.87,
-            bankroll=300.0
-        )
-
-        if pick:
-            print(f"  ✅ Pick final: {pick['lado']} @ {pick['odds']}")
-            print(f"      - Stake: ${pick['stake_usd']:.2f}")
-            print(f"      - Edge: {pick['edge_pct']:.1f}%")
-        else:
-            print(f"  ⚠️  Sin pick (edge insuficiente)")
-
-    print("\n  ✅ TEST 5 APROBADO")
-
-except Exception as e:
-    print(f"\n  ❌ TEST 5 FALLIDO: {e}")
-    import traceback
-    traceback.print_exc()
-    sys.exit(1)
-
-# ═══════════════════════════════════════════════════════
-# RESUMEN
-# ═══════════════════════════════════════════════════════
-
-print("\n" + "=" * 60)
-print("  ✅ TODOS LOS TESTS APROBADOS")
-print("=" * 60)
-print("\n  El pipeline está listo para usar con datos reales.")
-print("  Para comenzar:")
-print("    1. Ejecuta el pipeline completo")
-print("    2. Registra los picks generados")
-print("    3. Después de 7-14 días, revisa el win rate en module5")
-print()
+def test_prediccion_pegada_a_la_linea_no_da_pick():
+    pick = analizar_pick_prop(pred(25.0, std=5.0), linea_casa=25.5,
+                              odds_over=1.91, odds_under=1.87, bankroll=300)
+    assert pick is None
