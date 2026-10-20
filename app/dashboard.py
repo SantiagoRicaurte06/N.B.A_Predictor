@@ -14,8 +14,8 @@ from datetime import datetime
 import sys
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 
-from nba_predictor.datos.fuente_nba import cargar_todos_los_datos
-from nba_predictor.modelo.pooled import generar_predicciones_pooled
+from nba_predictor.datos.hoy import datos_del_dia
+from nba_predictor.modelo import diario
 from nba_predictor.apuestas.stakes import (
     generar_stakes, cargar_bankroll,
     calcular_estadisticas_historial, PARAMS,
@@ -215,34 +215,38 @@ with tab_picks:
 
     if st.session_state.datos_cargados is None:
         if st.button("🚀 Cargar datos NBA y generar predicciones", use_container_width=True):
-            with st.spinner("Descargando datos NBA y entrenando modelo pooled... (2-3 min)"):
+            with st.spinner("Descargando datos de ESPN y entrenando el modelo... (1-3 min)"):
                 try:
-                    datos = cargar_todos_los_datos()
+                    datos = datos_del_dia()
                     st.session_state.datos_cargados = datos
 
-                    # Modelo pooled (ADR-002): entrena una vez y se reutiliza.
-                    predicciones, modelo = generar_predicciones_pooled(
-                        datos, st.session_state.get('modelo_pooled')
-                    )
-                    st.session_state['modelo_pooled'] = modelo
-                    st.session_state.predicciones = predicciones
+                    # El modelo se entrena una vez al día y queda en cache/modelos.
+                    tabla, modelo = diario.predecir(datos)
+                    st.session_state['modelo'] = modelo
+                    st.session_state.predicciones = [
+                        {'jugador': r.jugador, 'target': 'PTS', 'prediccion': r.prediccion,
+                         'pred_sigma': r.sigma, 'mae': r.sigma, 'avg_historico': round(r.pts_l10, 1),
+                         'es_gtd': bool(r.es_duda), 'confianza': 'MEDIA'}
+                        for r in tabla.itertuples()
+                    ]
+                    predicciones = st.session_state.predicciones
 
-                    st.success(f"✅ {len(predicciones)} predicciones generadas (modelo pooled)")
+                    st.success(f"✅ {len(predicciones)} predicciones generadas (modelo de puntos v2)")
                     st.rerun()
                 except Exception as e:
                     st.error(f"Error cargando datos: {e}")
-                    st.info("Verifica tu conexión a internet y que nba_api esté instalado.")
+                    st.info("Verifica tu conexión a internet: los datos vienen de la API de ESPN.")
     else:
         datos = st.session_state.datos_cargados
 
         # Mostrar injury report
-        injury_df = datos.get('injury_df', pd.DataFrame())
-        ausentes = [j for j in datos.get('jugadores_hoy', []) if not j['disponible']]
+        jh = datos.get('jp_hoy', pd.DataFrame())
+        ausentes = jh[jh['no_jugo'] | jh['es_duda']] if len(jh) else jh
 
-        if ausentes:
+        if len(ausentes):
             with st.expander(f"❌ {len(ausentes)} jugadores fuera/dudosos hoy", expanded=False):
-                for j in ausentes:
-                    st.markdown(f"- **{j['nombre']}**: {j['estado']}")
+                for j in ausentes.itertuples():
+                    st.markdown(f"- **{j.jugador}** ({j.equipo}): {j.estado_lesion}")
 
         # Picks generados
         if st.session_state.picks:
@@ -391,7 +395,7 @@ with tab_lineas:
         if st.button("⚡ Calcular Picks y Stakes", use_container_width=True):
             with st.spinner("Calculando Kelly Criterion..."):
                 picks, estado_bk, stats = generar_stakes(
-                    predicciones, lineas, bankroll_inicial
+                    predicciones, lineas, bankroll_inicial, modelo=st.session_state.get('modelo')
                 )
                 st.session_state.picks = picks
                 st.session_state.bankroll = estado_bk
