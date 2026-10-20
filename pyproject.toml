@@ -16,6 +16,7 @@ dependencies = [
     "scipy",
     "streamlit",
     "requests",
+    "pyarrow",
 ]
 
 [project.optional-dependencies]
