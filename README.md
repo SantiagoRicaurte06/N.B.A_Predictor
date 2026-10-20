@@ -1,5 +1,7 @@
 # NBA Predictor
 
+**Versión 0.2.0** · [Registro de cambios](CHANGELOG.md)
+
 Predicción de los **puntos** de jugadores NBA y gestión de apuestas en papel contra
 las líneas de Betano, con una regla central: **no se arriesga dinero real hasta
 demostrar ventaja en papel**.
@@ -33,10 +35,14 @@ flowchart LR
    plantillas y las líneas de partido, y predice los puntos de cada jugador de
    rotación.
 2. Escribes las líneas de Betano de los jugadores que te interesan. El modelo da
-   la probabilidad calibrada de over o under y, si supera el piso, el stake Kelly.
+   la probabilidad calibrada de over o under y, si supera el piso (70 %), el
+   stake Kelly. Al registrar, se guardan **todas** las líneas que escribiste,
+   apostadas o no: son la base para medir el edge real contra Betano.
 3. **Resultados:** al día siguiente, un botón resuelve los picks con los box
    scores de ESPN. Si el jugador no jugó, el pick queda anulado.
-4. **Rendimiento:** ROI, calibración en vivo y el gate papel → dinero real.
+4. **Rendimiento:** bankroll, ROI, calibración en vivo y el gate papel → dinero real.
+5. **Modelo:** factores en uso, validación, holdout y, cuando haya 30 o más, el
+   rendimiento contra tus líneas reales.
 
 ![Pestaña Hoy: partidos, bajas y predicciones con las líneas de Betano](docs/img/hoy.png)
 
@@ -74,6 +80,14 @@ El acierto contra líneas sintéticas **sobreestima** el edge real: esas líneas
 equivocan en casos que Betano no fallaría. Sirve para elegir el umbral, no para
 prometer ganancias.
 
+**Limitaciones conocidas**
+
+- En las primeras dos semanas de cada temporada el modelo no ve las ausencias:
+  reconstruye la rotación de cada equipo con los partidos recientes.
+- Las bajas de última hora no llegan si el día se cargó temprano: conviene volver
+  a cargarlo cerca del inicio de los partidos.
+- Solo se predice a jugadores con 10 partidos previos y 15 minutos de media.
+
 ---
 
 ## Gate papel → dinero real
@@ -91,6 +105,8 @@ distingue ventaja de suerte.
 ---
 
 ## Instalación
+
+Requiere Python 3.10 o superior. Streamlit 1.60 o superior se instala con el paquete.
 
 ```bash
 pip install -e ".[dev]"
@@ -119,10 +135,27 @@ nba_predictor/
   apuestas/      Kelly, edge y tamaño de cada apuesta
   seguimiento/   ledger de picks, métricas, gate y diagnóstico
   backtest/      evaluación por temporadas contra líneas sintéticas
-app/             dashboard Streamlit
+app/             dashboard Streamlit (una vista por pestaña)
 scripts/         recalibración
 tests/           pytest
 docs/            PRD, TRD, ADR, DATA_SPEC, PLAN, recalibración e históricos
+.streamlit/      tema claro y oscuro del dashboard
+.claude/skills/  skills del equipo para trabajar con agentes
+```
+
+Los datos descargados, el modelo del día, el ledger y las líneas reales viven en
+`cache/`, que no se sube al repositorio.
+
+---
+
+## Contribuir
+
+El repositorio sigue [GIT_WORKFLOW.md](GIT_WORKFLOW.md): ramas `feature/`, `fix/`,
+`refactor/`… que salen de `develop`, commits en Conventional Commits y PR con las
+pruebas en verde. Al clonar, activa los hooks una vez:
+
+```bash
+git config core.hooksPath .githooks
 ```
 
 ---
@@ -140,11 +173,13 @@ docs/            PRD, TRD, ADR, DATA_SPEC, PLAN, recalibración e históricos
 
 | Documento | Contenido |
 |---|---|
+| [CHANGELOG.md](CHANGELOG.md) | Cambios de cada versión |
 | [RECALIBRACION.md](docs/RECALIBRACION.md) | Datos de ESPN, factores, validación y holdout del modelo v2 |
 | [PRD.md](docs/PRD.md) · [TRD.md](docs/TRD.md) | Producto y arquitectura técnica |
 | [ADR.md](docs/ADR.md) | Decisiones de arquitectura |
 | [DATA_SPEC.md](docs/DATA_SPEC.md) | Fuentes de datos y sus trampas |
 | [PLAN.md](docs/PLAN.md) | Plan por fases |
+| [GIT_WORKFLOW.md](GIT_WORKFLOW.md) | Ramas, commits, PRs y releases |
 | [CALIBRACION.md](docs/CALIBRACION.md) · [baseline.md](docs/baseline.md) · [comparacion.md](docs/comparacion.md) | Mediciones del modelo anterior (histórico) |
 
 ---
