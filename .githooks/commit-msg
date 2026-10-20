@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+# Valida el mensaje de commit según GIT_WORKFLOW.md:
+# Conventional Commits, ≤ 72 caracteres, sin punto final y sin trailers de coautoría ni firmas de IA.
+# Saltar en una emergencia: git commit --no-verify
+set -euo pipefail
+
+archivo="$1"
+# Primera línea que no sea comentario
+asunto=$(grep -v '^#' "$archivo" | sed -n '/[^[:space:]]/{p;q;}')
+
+# Mensajes automáticos de git: se permiten
+case "$asunto" in
+  "Merge "*|"Revert \""*|"fixup! "*|"squash! "*|"amend! "*) exit 0 ;;
+esac
+
+error() {
+  echo "✖ commit rechazado: $1" >&2
+  echo "  Mensaje: \"$asunto\"" >&2
+  echo "  Formato: <tipo>(<scope>): <descripción>   ej: feat(auth): add JWT login endpoint" >&2
+  echo "  Normas: GIT_WORKFLOW.md (sección 2)" >&2
+  exit 1
+}
+
+tipos='feat|fix|refactor|perf|test|docs|style|build|ci|chore|revert'
+if ! printf '%s' "$asunto" | grep -Eq "^($tipos)(\([a-z0-9-]+\))?!?: [^[:space:]]"; then
+  error "no sigue Conventional Commits (tipos: ${tipos//|/, })"
+fi
+if [ "${#asunto}" -gt 72 ]; then
+  error "la primera línea tiene ${#asunto} caracteres (máximo 72)"
+fi
+case "$asunto" in *.) error "la descripción no debe terminar en punto" ;; esac
+
+descripcion=${asunto#*: }
+case "$descripcion" in [A-Z]*) error "la descripción debe empezar en minúscula" ;; esac
+if printf '%s' "$descripcion" | grep -Eqi '^(fix|changes|update|stuff|wip|final( final)?|test|asdf|cosas|\.)$'; then
+  error "descripción prohibida por poco clara: \"$descripcion\""
+fi
+
+if grep -v '^#' "$archivo" | grep -Eqi '^co-authored-by:|generated (with|by) (claude|chatgpt|copilot|cursor|ai)|🤖'; then
+  error "contiene un trailer de coautoría o una firma de IA (sección 6)"
+fi
+
+exit 0
