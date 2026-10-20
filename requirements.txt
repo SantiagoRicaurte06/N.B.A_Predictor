@@ -1,9 +1,8 @@
-nba_api
 xgboost
 pandas
 numpy
 scikit-learn
 scipy
-streamlit
+streamlit>=1.60
 requests
-pathlib
+pyarrow
