@@ -1,4 +1,3 @@
-nba_api
 xgboost
 pandas
 numpy
