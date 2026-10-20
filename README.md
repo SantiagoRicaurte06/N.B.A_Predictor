@@ -38,6 +38,12 @@ flowchart LR
    scores de ESPN. Si el jugador no jugó, el pick queda anulado.
 4. **Rendimiento:** ROI, calibración en vivo y el gate papel → dinero real.
 
+![Pestaña Hoy: partidos, bajas y predicciones con las líneas de Betano](docs/img/hoy.png)
+
+![Pestaña Modelo: factores en uso y resultados de validación](docs/img/modelo.png)
+
+El tema claro u oscuro se elige en ⋮ → Settings.
+
 ---
 
 ## Qué tiene en cuenta el modelo
