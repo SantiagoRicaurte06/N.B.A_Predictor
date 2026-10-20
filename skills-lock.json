@@ -1,0 +1,65 @@
+{
+  "version": 1,
+  "skills": {
+    "anti-slop": {
+      "source": "rand/cc-polymath",
+      "sourceType": "github",
+      "skillPath": "skills/anti-slop/SKILL.md",
+      "computedHash": "0800335799f745c475640bec46c3c57a80ef5025574035d129ec2d5c1cb6847f"
+    },
+    "caveman": {
+      "source": "JuliusBrussee/caveman",
+      "sourceType": "github",
+      "skillPath": "skills/caveman/SKILL.md",
+      "computedHash": "71b600c88c8d1d36f18c4875db23b53c5d6cb9ba3195e19451d6b1bb67db07c4"
+    },
+    "checklist-lanzamiento": {
+      "source": "santiagoricaurte06/discord",
+      "sourceType": "github",
+      "skillPath": "skills/checklist-lanzamiento/SKILL.md",
+      "computedHash": "c7d9c727916f91fe3997d59a1c7adc7d2417606541d266f396a320261469f5a4"
+    },
+    "git-workflow": {
+      "source": "santiagoricaurte06/discord",
+      "sourceType": "github",
+      "skillPath": "skills/git-workflow/SKILL.md",
+      "computedHash": "91cfd6bee2d2b58784fb6700b84e7649392b34c03d0106534fee5f8d9d4a5e02"
+    },
+    "grill-me": {
+      "source": "mattpocock/skills",
+      "sourceType": "github",
+      "skillPath": "skills/productivity/grill-me/SKILL.md",
+      "computedHash": "9cdbb4b8f7a3aeaef82e6230c9e823500d4a8a1214c726cf342cf9829d34fc7d"
+    },
+    "grilling": {
+      "source": "mattpocock/skills",
+      "sourceType": "github",
+      "skillPath": "skills/productivity/grilling/SKILL.md",
+      "computedHash": "ef1641a2047b71b60f1942cd35efb47d3afc9d584dff5a0b01f8c7db923aaa08"
+    },
+    "guia-skills": {
+      "source": "santiagoricaurte06/discord",
+      "sourceType": "github",
+      "skillPath": "skills/guia-skills/SKILL.md",
+      "computedHash": "8b2a6f0a574f81fe5420873e3824a28d329e3935cf2edc160f6259404828b9c5"
+    },
+    "megacave": {
+      "source": "JuliusBrussee/caveman",
+      "sourceType": "github",
+      "skillPath": "skills/megacave/SKILL.md",
+      "computedHash": "60da384ce09cedf553e2b6dfe4669ffb4e53f34c3df8ce2c8012a32e06f8e187"
+    },
+    "proteccion": {
+      "source": "santiagoricaurte06/discord",
+      "sourceType": "github",
+      "skillPath": "skills/proteccion/SKILL.md",
+      "computedHash": "9c6cfafcb8e906aa02396785993ad6edb4ada3df4c4c126a237c73b149d99e47"
+    },
+    "ultracave": {
+      "source": "JuliusBrussee/caveman",
+      "sourceType": "github",
+      "skillPath": "skills/ultracave/SKILL.md",
+      "computedHash": "d2e5de7e5e664e95c0c93ea0fb84c6b78a4bb2351c71964c453a8a35c63869eb"
+    }
+  }
+}
