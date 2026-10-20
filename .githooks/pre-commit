@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# Impide commits directos a main y develop (GIT_WORKFLOW.md, sección 1).
+# Los merges de release/hotfix sí se permiten. Saltar en una emergencia: git commit --no-verify
+set -euo pipefail
+
+rama=$(git symbolic-ref --short HEAD 2>/dev/null || echo "")
+protegidas='^(main|master|develop)$'
+
+if [[ "$rama" =~ $protegidas ]] && [ ! -f "$(git rev-parse --git-dir)/MERGE_HEAD" ]; then
+  echo "✖ commit rechazado: no se hacen commits directos a '$rama'." >&2
+  echo "  Crea una rama:  git switch -c feature/<descripcion-corta>" >&2
+  exit 1
+fi
+
+# Archivos con secretos que nunca deben subirse (se permiten las plantillas .env.example/.sample/.template)
+secretos=$(git diff --cached --name-only --diff-filter=ACMR \
+  | grep -E '(^|/)\.env($|\.)|\.pem$|\.key$|\.p12$|(^|/)id_(rsa|ed25519)$' \
+  | grep -Ev '(^|/)\.env\.(example|sample|template)$' || true)
+if [ -n "$secretos" ]; then
+  echo "✖ commit rechazado: hay archivos con secretos en el stage:" >&2
+  printf '%s\n' "$secretos" | sed 's/^/  - /' >&2
+  echo "  Quítalos con: git restore --staged <archivo>  y agrégalos a .gitignore" >&2
+  exit 1
+fi
+
+exit 0
