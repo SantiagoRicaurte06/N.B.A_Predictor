@@ -1,0 +1,57 @@
+# Verifica en cada pull request las normas de GIT_WORKFLOW.md:
+# título en Conventional Commits y commits sin trailers de coautoría ni firmas de IA.
+name: Commits
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  titulo:
+    name: Título en Conventional Commits
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validar título del PR
+        env:
+          TITULO: ${{ github.event.pull_request.title }}
+        run: |
+          tipos='feat|fix|refactor|perf|test|docs|style|build|ci|chore|revert'
+          if ! printf '%s' "$TITULO" | grep -Eq "^($tipos)(\([a-z0-9-]+\))?!?: [^[:space:]]"; then
+            echo "::error::El título \"$TITULO\" no sigue Conventional Commits. Ej: feat(auth): add JWT login endpoint"
+            exit 1
+          fi
+          if [ "${#TITULO}" -gt 72 ]; then
+            echo "::error::El título tiene ${#TITULO} caracteres (máximo 72)."
+            exit 1
+          fi
+          case "$TITULO" in *.) echo "::error::El título no debe terminar en punto."; exit 1 ;; esac
+          echo "✓ $TITULO"
+
+  trailers:
+    name: Sin trailers de coautoría
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Revisar mensajes de los commits del PR
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+          CUERPO: ${{ github.event.pull_request.body }}
+        run: |
+          patron='^co-authored-by:|generated (with|by) (claude|chatgpt|copilot|cursor|ai)|🤖'
+          malos=$(git log --format='%h %s%n%b' "$BASE..$HEAD" | grep -Ei "$patron" || true)
+          if [ -n "$malos" ]; then
+            echo "::error::Hay commits con trailers de coautoría o firmas de IA (GIT_WORKFLOW.md, sección 6):"
+            echo "$malos"
+            exit 1
+          fi
+          if printf '%s' "$CUERPO" | grep -Eqi "$patron"; then
+            echo "::error::La descripción del PR contiene una firma de IA."
+            exit 1
+          fi
+          echo "✓ Sin trailers ni firmas"

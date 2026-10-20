@@ -20,7 +20,7 @@ env/
 ENV/
 
 # === Herramientas / IDE ===
-.claude/
+.claude/settings.local.json
 .vscode/
 .idea/
 *.swp
