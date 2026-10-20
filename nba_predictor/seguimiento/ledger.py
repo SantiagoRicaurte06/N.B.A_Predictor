@@ -20,6 +20,9 @@ COLUMNS = [
     "id", "fecha", "jugador", "target", "lado", "linea", "odds",
     "pred_media", "pred_sigma", "prob_modelo", "edge_pct", "stake",
     "modo", "resultado", "pnl",
+    # Identificador de ESPN del jugador: permite resolver el pick solo con
+    # el box score del día siguiente. Los ledgers anteriores no lo tienen.
+    "athlete_id",
 ]
 
 RESULTADOS_VALIDOS = {"W", "L", "VOID"}
@@ -86,7 +89,7 @@ def _limite_inferior_wilson(exitos: int, n: int, z: float = 1.96) -> float:
 def _cargar_ledger() -> pd.DataFrame:
     """Carga el ledger completo. Si no existe, devuelve uno vacío con el esquema."""
     if LEDGER_FILE.exists():
-        df = pd.read_csv(LEDGER_FILE)
+        df = pd.read_csv(LEDGER_FILE, dtype={"athlete_id": str})
         # Garantizar todas las columnas del esquema (tolerante a versiones)
         for col in COLUMNS:
             if col not in df.columns:
@@ -141,6 +144,7 @@ def registrar_pick(pick: dict, modo: str = "PAPEL") -> int:
         "modo":        modo,
         "resultado":   pd.NA,   # pendiente
         "pnl":         pd.NA,   # se calcula al registrar el resultado
+        "athlete_id":  pick.get("athlete_id"),
     }
 
     fila = pd.DataFrame([fila_dict], columns=COLUMNS)

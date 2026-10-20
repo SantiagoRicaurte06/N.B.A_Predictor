@@ -359,10 +359,11 @@ def guardar_picks_del_dia(picks: list[dict], modo: str = "PAPEL") -> list[int]:
             'linea':       p.get('linea'),
             'odds':        p.get('odds'),
             'pred_media':  p.get('prediccion_modelo'),
-            'pred_sigma':  p.get('pred_sigma'),   # None en v1 (llega en Fase 2)
+            'pred_sigma':  p.get('pred_sigma'),
             'prob_modelo': p.get('prob_modelo'),
             'edge_pct':    p.get('edge_pct'),
             'stake':       p.get('stake_usd'),
+            'athlete_id':  p.get('athlete_id'),
         }
         ids.append(trk.registrar_pick(pick_ledger, modo=modo))
     return ids
