@@ -9,7 +9,7 @@
 
 from datetime import datetime
 
-import module8_tracking as trk
+import nba_predictor.seguimiento.ledger as trk
 
 # ─────────────────────────────────────────────
 # CONFIGURACIÓN DE RIESGO — fuente única (PARAMS)

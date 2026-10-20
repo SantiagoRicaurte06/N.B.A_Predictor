@@ -12,7 +12,7 @@ if hasattr(sys.stdout, "reconfigure"):
 
 import pandas as pd
 
-import module1_data_engine as m1
+import nba_predictor.datos.fuente_nba as m1
 
 FALLOS = 0
 

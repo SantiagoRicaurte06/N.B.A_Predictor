@@ -12,20 +12,20 @@ from datetime import datetime
 
 # Módulos del sistema
 import sys
-sys.path.append(str(Path(__file__).parent))
+sys.path.append(str(Path(__file__).resolve().parent.parent))
 
-from module1_data_engine import cargar_todos_los_datos
-from module9_pooled_model import generar_predicciones_pooled
-from module3_stakes_engine import (
+from nba_predictor.datos.fuente_nba import cargar_todos_los_datos
+from nba_predictor.modelo.pooled import generar_predicciones_pooled
+from nba_predictor.apuestas.stakes import (
     generar_stakes, cargar_bankroll,
     calcular_estadisticas_historial, PARAMS,
 )
-import module8_tracking as trk
-from module5_error_analysis import (
+import nba_predictor.seguimiento.ledger as trk
+from nba_predictor.seguimiento.diagnostico import (
     ejecutar_analisis_completo,
     PATRONES_FILE,
 )
-from module6_odds_engine import (
+from nba_predictor.apuestas.odds_api import (
     get_odds_props,
     get_api_key,
     set_api_key,

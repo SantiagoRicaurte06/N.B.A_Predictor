@@ -18,7 +18,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from module1_data_engine import (
+from nba_predictor.datos.fuente_nba import (
     get_stats_liga,
     filtrar_jugadores_elegibles,
     get_player_gamelog,

@@ -17,7 +17,7 @@
 import sys
 from datetime import datetime
 
-import module7_backtest_engine as bt
+import nba_predictor.backtest.walk_forward as bt
 
 MAX_TEST_DEFAULT = 4
 SEASONS = ["2024-25", "2025-26"]

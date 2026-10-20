@@ -9,7 +9,7 @@ import sys
 import pandas as pd
 from pathlib import Path
 
-import module8_tracking as trk
+import nba_predictor.seguimiento.ledger as trk
 
 FALLOS = 0
 

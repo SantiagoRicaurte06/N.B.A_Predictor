@@ -18,7 +18,7 @@ import pandas as pd
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
-import module7_backtest_engine as bt
+import nba_predictor.backtest.walk_forward as bt
 
 SEASONS = ["2024-25", "2025-26"]   # NBA
 

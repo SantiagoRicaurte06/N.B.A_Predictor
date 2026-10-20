@@ -11,8 +11,8 @@
 import sys
 from datetime import datetime
 
-import module7_backtest_engine as bt
-import module9_pooled_model as mp
+import nba_predictor.backtest.walk_forward as bt
+import nba_predictor.modelo.pooled as mp
 
 SEASONS = ["2024-25", "2025-26"]
 MAX_TEST = 4

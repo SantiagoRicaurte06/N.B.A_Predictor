@@ -9,7 +9,7 @@ import sys
 import numpy as np
 import pandas as pd
 
-import module7_backtest_engine as bt
+import nba_predictor.backtest.walk_forward as bt
 
 FALLOS = 0
 

@@ -25,7 +25,7 @@ print("\n" + "-" * 50)
 print("  TEST 1: Feature Engineering (module2)")
 print("-" * 50)
 
-from module2_prediction_engine import (
+from nba_predictor.modelo.features import (
     build_player_features,
     calcular_usage_rate,
     calcular_rebound_rate,
@@ -194,7 +194,7 @@ print("\n" + "-" * 50)
 print("  TEST 4: Stakes Engine (module3)")
 print("-" * 50)
 
-from module3_stakes_engine import (
+from nba_predictor.apuestas.stakes import (
     calcular_edge,
     kelly_criterion,
     analizar_pick_prop,
@@ -307,7 +307,7 @@ try:
 
     if resultado:
         # 4. Aplicar ajustes
-        from module2_prediction_engine import predecir_con_ausencias
+        from nba_predictor.modelo.features import predecir_con_ausencias
 
         resultado_ajustado = predecir_con_ausencias(
             nombre='Test Player',

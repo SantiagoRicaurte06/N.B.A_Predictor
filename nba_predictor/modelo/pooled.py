@@ -19,7 +19,7 @@ import numpy as np
 import pandas as pd
 from xgboost import XGBRegressor
 
-from module2_prediction_engine import build_player_features
+from nba_predictor.modelo.features import build_player_features
 
 FEATURES_VERSION = "pooled-v1"
 
@@ -286,7 +286,7 @@ def generar_predicciones_pooled(datos: dict, modelo: "ModeloPooled | None" = Non
     de hoy. Retorna (predicciones, modelo) para poder reutilizar el modelo.
     Ref: PLAN Fase 2.3.
     """
-    import module7_backtest_engine as bt
+    import nba_predictor.backtest.walk_forward as bt
 
     if modelo is None:
         gamelogs_hist = bt.cargar_gamelogs_cache(list(seasons))

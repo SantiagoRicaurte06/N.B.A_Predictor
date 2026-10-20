@@ -232,7 +232,7 @@ def predictor_baseline_perjugador(historia: pd.DataFrame) -> tuple[float, float]
     entrenar_modelo_props para medir la línea base en backtest (Fase 1.3).
     Lento: reentrena XGBoost en cada llamada.
     """
-    from module2_prediction_engine import entrenar_modelo_props
+    from nba_predictor.modelo.features import entrenar_modelo_props
     res = entrenar_modelo_props(historia, 'PTS')
     if res is None:
         return None
