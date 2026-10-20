@@ -10,6 +10,7 @@
 from datetime import datetime
 
 import nba_predictor.seguimiento.ledger as trk
+from nba_predictor.modelo.configuracion import UMBRAL_PROB
 
 # ─────────────────────────────────────────────
 # CONFIGURACIÓN DE RIESGO — fuente única (PARAMS)
@@ -20,21 +21,15 @@ import nba_predictor.seguimiento.ledger as trk
 PARAMS = {
     'kelly_fraction': 0.10,   # Kelly fraccionado
     'min_edge':       0.08,   # Piso económico: valor esperado suficiente
-    # Piso de CONVICCIÓN, medido en validación (ver CALIBRACION.md).
+    # Piso de CONVICCIÓN: probabilidad calibrada mínima para apostar. Se elige
+    # en validación (scripts/recalibrar.py, docs/RECALIBRACION.md) y vive en
+    # modelo/configuracion.py junto al resto de la configuración congelada.
     #
     # Por qué hace falta uno aparte del edge: edge = prob × cuota − 1, así que
     # un mismo edge se alcanza con prob alta y cuota mala o al revés. Filtrar
     # solo por edge deja pasar picks de baja convicción cuando la cuota es
-    # generosa — y lo que aguantó fuera de muestra fue el RANKING del modelo,
-    # no el edge.
-    #
-    # Acierto medido en validación (6 142 puntos) por umbral de probabilidad:
-    #     >= 0.55  ->  53.2 %   (por DEBAJO del break-even de 53.5 %)
-    #     >= 0.60  ->  55.7 %
-    #     >= 0.65  ->  58.3 %
-    # El antiguo min_edge de 0.08 equivale a prob ~57.8 % con cuota 1.87, o sea
-    # dentro de la zona perdedora.
-    'min_prob':       0.65,
+    # generosa.
+    'min_prob':       UMBRAL_PROB,
     'max_bet_pct':    0.08,   # Tope: 8% del bankroll por apuesta
     'min_bet_usd':    2.0,    # Apuesta mínima en USD
     'confianza_mult': {'ALTA': 1.0, 'MEDIA': 0.50, 'BAJA': 0.25},
@@ -174,11 +169,20 @@ def analizar_pick_prop(prediccion_resultado: dict,
                         linea_casa: float,
                         odds_over: float,
                         odds_under: float,
-                        bankroll: float) -> dict | None:
+                        bankroll: float,
+                        prob_over: float | None = None) -> dict | None:
     """
     Analiza si hay valor en Over o Under para una prop.
     Retorna pick con stake si hay edge, None si no hay valor.
+
+    `prob_over` es la probabilidad CALIBRADA del modelo para esta línea
+    (ModeloPuntos.prob_supera). Si llega, manda ella; si no, se aproxima con
+    una normal sobre la predicción, como hacía el modelo anterior.
     """
+    if prob_over is not None:
+        return _pick_con_probabilidad(prediccion_resultado, linea_casa, odds_over,
+                                      odds_under, bankroll, float(prob_over))
+
     prediccion = prediccion_resultado['prediccion']
     mae        = prediccion_resultado['mae']
     confianza  = prediccion_resultado.get('confianza', 'MEDIA')
@@ -197,7 +201,7 @@ def analizar_pick_prop(prediccion_resultado: dict,
     # El MAE subestima la varianza real, multiplicar por 1.25 para aproximar STD
     from scipy.stats import norm
 
-    # Sigma: preferir pred_sigma del contrato (modelo pooled, ADR-008); si no,
+    # Sigma: preferir pred_sigma del contrato (ADR-008); si no,
     # caer a std_historico o a una aproximación desde el MAE. Floor de 3.0.
     sigma_fuente = (prediccion_resultado.get('pred_sigma')
                     or prediccion_resultado.get('std_historico')
@@ -290,6 +294,53 @@ def analizar_pick_prop(prediccion_resultado: dict,
     }
 
 
+def _pick_con_probabilidad(pred: dict, linea: float, odds_over: float, odds_under: float,
+                           bankroll: float, prob_over: float) -> dict | None:
+    """Pick a partir de una probabilidad ya calibrada: se juega el lado más
+    probable si supera el piso de convicción medido en validación."""
+    prediccion = pred['prediccion']
+    es_valida, _ = validar_prediccion(prediccion, pred.get('target', 'PTS'),
+                                      pred.get('avg_historico', prediccion))
+    if not es_valida:
+        return None
+
+    if prob_over >= 0.5:
+        lado, prob, odds = 'OVER', prob_over, odds_over
+    else:
+        lado, prob, odds = 'UNDER', 1 - prob_over, odds_under
+    if prob < MIN_PROB:
+        return None
+    edge = calcular_edge(prob, odds)
+    if edge < MIN_EDGE:
+        return None
+    kelly_pct = kelly_criterion(prob, odds)
+    confianza = pred.get('confianza', 'MEDIA')
+    es_gtd = pred.get('es_gtd', False)
+    stake = calcular_stake_usd(kelly_pct, bankroll, confianza, es_gtd) if kelly_pct > 0 else 0
+    if stake <= 0:
+        return None
+    return {
+        'jugador':            pred.get('jugador', ''),
+        'mercado':            pred.get('target', 'PTS'),
+        'tipo':               f"PROP {pred.get('target', 'PTS')} {lado} {linea}",
+        'lado':               lado,
+        'linea':              linea,
+        'prediccion_modelo':  prediccion,
+        'mae':                pred.get('mae'),
+        'prob_modelo':        round(prob, 3),
+        'odds':               odds,
+        'edge_pct':           round(edge * 100, 1),
+        'kelly_pct':          round(kelly_pct * 100, 2),
+        'stake_usd':          stake,
+        'ganancia_potencial': round(stake * (odds - 1), 2),
+        'confianza':          confianza,
+        'es_gtd':             es_gtd,
+        'ajustado_ausencias': False,
+        'ajustes_ausencias':  [],
+        'timestamp':          datetime.now().isoformat(),
+    }
+
+
 # ─────────────────────────────────────────────
 # 4. HISTORIAL DE APUESTAS — vía ledger de module8
 # ─────────────────────────────────────────────
@@ -346,9 +397,11 @@ def calcular_estadisticas_historial(modo: str = "PAPEL") -> dict:
 def generar_stakes(predicciones: list[dict],
                    lineas_manuales: dict,
                    bankroll_inicial: float | None = None,
-                   modo: str = "PAPEL") -> tuple[list[dict], dict, dict]:
+                   modo: str = "PAPEL",
+                   modelo=None) -> tuple[list[dict], dict, dict]:
     """
-    Recibe predicciones del Módulo 2 y líneas ingresadas manualmente.
+    Recibe predicciones y líneas ingresadas manualmente. Con `modelo`
+    (ModeloPuntos), la probabilidad de cada línea sale calibrada del modelo.
     v1 procesa SOLO mercados activos (PTS, ADR-001). Registra los picks en
     el ledger con el modo indicado (PAPEL por defecto — sin dinero real).
     Retorna (picks, estado_bankroll_derivado, stats).
@@ -379,7 +432,10 @@ def generar_stakes(predicciones: list[dict],
         odds_over   = datos_linea.get('odds_over', 1.87)
         odds_under  = datos_linea.get('odds_under', 1.87)
 
-        pick = analizar_pick_prop(pred, linea, odds_over, odds_under, bankroll)
+        prob_over = None
+        if modelo is not None:
+            prob_over = float(modelo.prob_supera([pred['prediccion']], [linea])[0])
+        pick = analizar_pick_prop(pred, linea, odds_over, odds_under, bankroll, prob_over)
         if pick:
             picks_con_valor.append(pick)
 

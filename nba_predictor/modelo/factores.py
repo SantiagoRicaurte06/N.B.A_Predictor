@@ -142,6 +142,9 @@ def _factores_jugador(jug: pd.DataFrame) -> pd.DataFrame:
     jug["pts_l10"] = prev("PTS", 10)
     jug["pts_l20"] = prev("PTS", 20)
     jug["pts_std_l10"] = prev("PTS", 10, 3, "std")
+    # Mediana: no es factor del modelo, es la base de la línea sintética. Las
+    # casas ponen la línea cerca de la mediana, no de la media (cola derecha).
+    jug["pts_mediana_l10"] = prev("PTS", 10, 3, "median")
     jug["pts_tendencia"] = jug["pts_l5"] - jug["pts_l20"]
     jug["min_l5"] = prev("MIN", 5, 2)
     jug["min_l10"] = prev("MIN", 10)
