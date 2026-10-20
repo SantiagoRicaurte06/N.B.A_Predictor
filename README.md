@@ -19,7 +19,7 @@ Un sistema personal que predice los **puntos (PTS)** de jugadores NBA para un pa
 
 Su principio rector: **no se arriesga dinero real hasta demostrar ventaja en papel.** Toda la arquitectura gira en torno a un _backtest_ honesto y una fase de _paper trading_ con un "gate" explícito antes de habilitar dinero real.
 
-> ⚠️ **Estado actual:** el modelo _pooled_ superó a la línea base en el backtest, pero su win rate está **en el break-even** (≈53.5 %) sobre líneas sintéticas — **aún no es rentable**. El sistema está en fase de validación en papel. Ver [`comparacion.md`](comparacion.md).
+> ⚠️ **Estado actual:** el modelo _pooled_ superó a la línea base en el backtest, pero su win rate está **en el break-even** (≈53.5 %) sobre líneas sintéticas — **aún no es rentable**. El sistema está en fase de validación en papel. Ver [`comparacion.md`](docs/comparacion.md).
 
 ---
 
@@ -34,10 +34,10 @@ flowchart LR
     end
 
     subgraph PIPELINE
-        M1[module1<br/>Data Engine]
-        M9[module9<br/>Modelo Pooled]
-        M3[module3<br/>Stakes · Kelly]
-        M8[(module8<br/>Ledger)]
+        M1[datos<br/>fuente_nba]
+        M9[modelo<br/>pooled]
+        M3[apuestas<br/>stakes · Kelly]
+        M8[(seguimiento<br/>ledger)]
     end
 
     NBA --> M1
@@ -48,10 +48,10 @@ flowchart LR
     BET --> M3
     M3 --> M8
     M8 --> DASH[Dashboard<br/>Paper Trading + Gate]
-    M8 --> M5[module5<br/>Diagnóstico solo-lectura]
+    M8 --> M5[seguimiento<br/>diagnóstico solo-lectura]
 
     subgraph OFFLINE["Validación offline"]
-        M7[module7<br/>Backtest walk-forward]
+        M7[backtest<br/>walk-forward]
     end
     CACHE --> M7
     M9 -.mide.-> M7
@@ -61,20 +61,31 @@ flowchart LR
 
 ---
 
-## 🧩 Módulos
+## 🧩 Estructura
 
-| Módulo | Rol |
-|--------|-----|
-| `module1_data_engine.py` | Descarga stats NBA, injury report (ESPN), partidos del día. Normaliza equipos y filtra DNP. |
-| `module9_pooled_model.py` | **Modelo _pooled_**: un XGBoost entrenado con ~30 000 partidos-jugador. Emite media **e incertidumbre** (`pred_sigma`). |
-| `module3_stakes_engine.py` | Kelly Criterion, _edge_, sizing. PTS-only, parámetros centralizados en `PARAMS`. |
-| `module8_tracking.py` | _Ledger_ append-only. Bankroll **derivado** (no mutable). Métricas y _gate_ papel→real. |
-| `module7_backtest_engine.py` | _Backtest_ walk-forward con anti-_leakage_ y línea sintética. La pieza de validación. |
-| `module5_error_analysis.py` | Diagnóstico **solo-lectura** (no aplica cambios automáticos). |
-| `module2` · `module6` | Código latente: modelos per-jugador / totales / spread y odds automáticas (fuera de v1). |
-| `dashboard.py` | Interfaz Streamlit: picks, líneas, historial, **paper trading**, bankroll, diagnóstico. |
+```
+nba_predictor/          paquete principal
+  datos/                descarga de stats, lesiones y partidos del día
+  modelo/               features por jugador, modelo pooled y baseline
+  apuestas/             Kelly, edge y tamaño de cada apuesta (solo PTS)
+  seguimiento/          ledger de picks, métricas, gate y diagnóstico
+  backtest/             backtest walk-forward sin leakage
+app/dashboard.py        interfaz Streamlit
+scripts/                descarga histórica, baseline, comparación y diagnósticos
+tests/                  pruebas (pytest)
+docs/                   PRD, TRD, ADR, DATA_SPEC, PLAN y resultados medidos
+```
 
-Scripts: `descargar_historico.py` (gamelogs a cache) · `correr_baseline.py` · `correr_comparacion.py`.
+| Pieza | Rol |
+|-------|-----|
+| `datos/fuente_nba.py` | Descarga stats NBA, reporte de lesiones (ESPN) y partidos del día. Normaliza equipos y filtra DNP. |
+| `modelo/pooled.py` | **Modelo _pooled_**: un XGBoost entrenado con ~30 000 partidos-jugador. Emite media **e incertidumbre** (`pred_sigma`). |
+| `modelo/features.py` | Features de cada partido construidas solo con partidos anteriores. |
+| `modelo/baseline.py` | Modelo por jugador original; solo sirve de referencia en el backtest. |
+| `apuestas/stakes.py` | Kelly Criterion, _edge_ y tamaño de apuesta. Parámetros centralizados en `PARAMS`. |
+| `seguimiento/ledger.py` | _Ledger_ append-only. Bankroll **derivado** (no mutable). Métricas y _gate_ papel→real. |
+| `seguimiento/diagnostico.py` | Diagnóstico **solo-lectura** (no aplica cambios automáticos). |
+| `backtest/walk_forward.py` | _Backtest_ walk-forward con anti-_leakage_ y línea sintética. La pieza de validación. |
 
 ---
 
@@ -90,35 +101,39 @@ Baseline (modelo viejo, per-jugador) **vs.** Pooled (nuevo), sobre los **mismos*
 | ROI proxy | −5.86 % | **−0.13 %** |
 | **Edge alto → win rate** | 47.1 % ❌ | **56.9 %** ✅ |
 
-La calibración es lo clave: el modelo viejo ganaba _menos_ en sus picks de mayor confianza (edge anti-predictivo, la raíz de las pérdidas). El _pooled_ **arregla el signo**: los picks de alto edge ganan +12 pp más que los de bajo. Detalle en [`comparacion.md`](comparacion.md) y [`baseline.md`](baseline.md).
+La calibración es lo clave: el modelo viejo ganaba _menos_ en sus picks de mayor confianza (edge anti-predictivo, la raíz de las pérdidas). El _pooled_ **arregla el signo**: los picks de alto edge ganan +12 pp más que los de bajo. Detalle en [`comparacion.md`](docs/comparacion.md) y [`baseline.md`](docs/baseline.md).
 
 ---
 
 ## 🚦 Gate papel → dinero real
 
-El dashboard no habilita dinero real hasta cumplir **los tres** criterios en modo PAPEL:
+El dashboard no habilita dinero real hasta que, en modo PAPEL, se cumpla todo esto:
 
 | Criterio | Meta |
 |----------|:----:|
-| Muestra | ≥ 100 picks resueltos |
-| Win rate | ≥ 54 % (sobre break-even ≈ 53.5 %) |
+| Muestra | ≥ 300 picks resueltos |
+| Win rate | ≥ 54 % (sobre el break-even ≈ 53.5 %) |
 | ROI | ≥ 0 % |
+| **Intervalo de confianza** | El límite inferior del IC 95 % (Wilson) supera el break-even |
 
-Mientras no se cumplan, la regla es simple: **seguir en papel, sin arriesgar dinero.**
+El último es el que manda: con 100 picks al 54 % el intervalo va de 44 % a 64 %, así que ese resultado no distingue ventaja de suerte. Mientras no se cumpla, la regla es simple: **seguir en papel, sin arriesgar dinero.**
 
 ---
 
 ## ⚙️ Instalación y uso
 
 ```bash
-# 1. Dependencias
-pip install -r requirements.txt
+# 1. Instalar el paquete y sus dependencias
+pip install -e ".[dev]"
 
 # 2. (una vez) Descargar histórico a cache para el backtest
-python descargar_historico.py
+python scripts/descargar_historico.py
 
 # 3. Dashboard
-streamlit run dashboard.py
+streamlit run app/dashboard.py
+
+# Pruebas
+pytest
 ```
 
 Se abre en `http://localhost:8501`. Uso diario: pestaña **Picks del Día** → cargar datos → **Ingresar Líneas** de Betano → calcular picks → registrar resultados en **Historial** → seguir el progreso en **Paper Trading**.
@@ -126,7 +141,7 @@ Se abre en `http://localhost:8501`. Uso diario: pestaña **Picks del Día** → 
 Validación offline:
 
 ```bash
-python correr_comparacion.py   # baseline vs pooled sobre el mismo test set
+python scripts/correr_comparacion.py   # baseline vs pooled sobre el mismo test set
 ```
 
 ---
@@ -145,12 +160,12 @@ python correr_comparacion.py   # baseline vs pooled sobre el mismo test set
 
 | Doc | Contenido |
 |-----|-----------|
-| [PRD.md](PRD.md) | Qué y por qué (producto) |
-| [TRD.md](TRD.md) | Arquitectura y contratos técnicos |
-| [ADR.md](ADR.md) | 8 decisiones de arquitectura y su porqué |
-| [DATA_SPEC.md](DATA_SPEC.md) | Fuentes de datos y sus trampas |
-| [PLAN.md](PLAN.md) | Plan de ejecución por fases |
-| [baseline.md](baseline.md) · [comparacion.md](comparacion.md) | Resultados medidos |
+| [PRD.md](docs/PRD.md) | Qué y por qué (producto) |
+| [TRD.md](docs/TRD.md) | Arquitectura y contratos técnicos |
+| [ADR.md](docs/ADR.md) | 8 decisiones de arquitectura y su porqué |
+| [DATA_SPEC.md](docs/DATA_SPEC.md) | Fuentes de datos y sus trampas |
+| [PLAN.md](docs/PLAN.md) | Plan de ejecución por fases |
+| [baseline.md](docs/baseline.md) · [comparacion.md](docs/comparacion.md) · [CALIBRACION.md](docs/CALIBRACION.md) | Resultados medidos |
 
 ---
 

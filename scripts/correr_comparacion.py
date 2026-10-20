@@ -134,9 +134,9 @@ Ambos modelos evaluados sobre los **mismos** puntos de test (ventana temporal
 > ⚠️ ROI con línea sintética = consistencia interna, no rentabilidad real.
 > La rentabilidad se valida en paper trading (ADR-003).
 """
-    with open("comparacion.md", "w", encoding="utf-8") as f:
+    with open("docs/comparacion.md", "w", encoding="utf-8") as f:
         f.write(md)
-    print("\n  💾 comparacion.md escrito")
+    print("\n  💾 docs/comparacion.md escrito")
 
 
 if __name__ == "__main__":
