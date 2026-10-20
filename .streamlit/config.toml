@@ -1,0 +1,36 @@
+# Tema sobrio: un solo color de acento, verde y rojo solo para ganar/perder.
+# El usuario alterna claro/oscuro desde el menú ⋮ → Settings.
+
+[theme]
+font = "Inter:https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+headingFont = "Inter:https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+codeFont = "JetBrains Mono:https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap"
+baseRadius = "0.5rem"
+showWidgetBorder = true
+headingFontWeights = [700, 600, 600, 600, 600, 600]
+
+[theme.light]
+primaryColor = "#2F6FDB"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F4F5F7"
+textColor = "#1A1D23"
+borderColor = "#E2E5EA"
+linkColor = "#2F6FDB"
+greenColor = "#1F8A5B"
+redColor = "#C9423A"
+chartCategoricalColors = ["#2F6FDB", "#8A94A6", "#1F8A5B", "#C9423A"]
+
+[theme.dark]
+primaryColor = "#6B9BEF"
+backgroundColor = "#0F1115"
+secondaryBackgroundColor = "#171A21"
+textColor = "#E4E6EB"
+borderColor = "#262A33"
+linkColor = "#6B9BEF"
+greenColor = "#3FB68B"
+redColor = "#E5534B"
+chartCategoricalColors = ["#6B9BEF", "#8A94A6", "#3FB68B", "#E5534B"]
+
+[client]
+# Oculta el botón Deploy y el menú de desarrollo; deja ⋮ → Settings para el tema.
+toolbarMode = "minimal"
