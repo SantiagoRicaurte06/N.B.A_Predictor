@@ -25,12 +25,6 @@ from nba_predictor.seguimiento.diagnostico import (
     ejecutar_analisis_completo,
     PATRONES_FILE,
 )
-from nba_predictor.apuestas.odds_api import (
-    get_odds_props,
-    get_api_key,
-    set_api_key,
-    buscar_jugador_en_props
-)
 # ─────────────────────────────────────────────
 # CONFIGURACIÓN DE LA APP
 # ─────────────────────────────────────────────
@@ -131,19 +125,6 @@ with st.sidebar:
         step=10.0,
         help="Tu capital total disponible para apostar"
     )
-
-    st.markdown("---")
-    st.markdown("### 🔑 Odds API")
-    odds_key_actual = get_api_key()
-    nueva_key = st.text_input(
-        "API Key (the-odds-api.com)",
-        value=odds_key_actual if odds_key_actual else "",
-        type="password",
-        help="Obtén una key gratis en the-odds-api.com (500 requests/mes)"
-    )
-    if nueva_key and nueva_key != odds_key_actual:
-        set_api_key(nueva_key)
-        st.success("✅ API Key guardada")
 
     st.markdown("---")
     st.markdown("### 🏠 Casa de apuestas")
@@ -351,44 +332,6 @@ with tab_lineas:
     st.markdown("### 📥 Ingresa las líneas de Betano")
     st.caption("Ingresa las odds decimales y líneas para los jugadores disponibles hoy.")
 
-    # ── BOTÓN CARGAR ODDS AUTOMÁTICAMENTE ──
-    api_key = get_api_key()
-    if not api_key:
-        st.info("""
-        🔑 **Configura tu API Key de The Odds API**
-
-        Obtén una key gratis en [the-odds-api.com](https://the-odds-api.com)
-        - 500 requests gratis por mes
-        - Datos en tiempo real de Betano y otras casas
-        - Configúrala en el sidebar ←
-        """)
-    else:
-        if st.button("⚡ Cargar Odds Automáticamente desde Betano", use_container_width=True):
-            with st.spinner("Conectando a The Odds API y obteniendo líneas..."):
-                try:
-                    odds_data = get_odds_props()
-                    if odds_data:
-                        st.session_state['odds_automaticas'] = odds_data
-                        st.success(f"✅ {len(odds_data)} líneas de odds cargadas")
-                        st.rerun()
-                    else:
-                        st.warning("""
-                        ⚠️ **No se encontraron player props disponibles**
-
-                        El plan gratuito de The Odds API incluye:
-                        - Spreads (líneas de partido)
-                        - Totals (over/under de puntos del partido)
-                        - Moneylines (quién gana)
-
-                        **Los player props (PTS/REB/AST por jugador) requieren un plan de pago.**
-
-                        💡 Opciones:
-                        1. Ingresa las líneas manualmente abajo
-                        2. Usa la API de Betano directamente si tienes acceso
-                        """)
-                except Exception as e:
-                    st.error(f"Error al obtener odds: {e}")
-
     if st.session_state.predicciones is None:
         st.warning("Primero carga los datos en la pestaña **Picks del Día**")
     else:
@@ -398,9 +341,6 @@ with tab_lineas:
         # Agrupar por jugador
         jugadores_pred = list(set(p['jugador'] for p in predicciones))
         jugadores_pred.sort()
-
-        # Recuperar odds automáticas si existen
-        odds_auto = st.session_state.get('odds_automaticas', {})
 
         for jugador in jugadores_pred:
             preds_jugador = [p for p in predicciones if p['jugador'] == jugador]
@@ -412,36 +352,11 @@ with tab_lineas:
                     mae    = pred.get('mae', 0)
                     pred_val = pred.get('prediccion', avg)
 
-                    # Buscar odds automáticas para este jugador+target
-                    key_busqueda = f"{jugador}_{target}"
-                    odds_match = None
-                    if odds_auto:
-                        # Buscar por coincidencia exacta o por nombre parcial
-                        for key_auto, datos_auto in odds_auto.items():
-                            if key_auto == key_busqueda:
-                                odds_match = datos_auto
-                                break
-                            # Buscar por nombre parcial (sin el _PTS/_REB/_AST)
-                            if target in ['PTS', 'REB', 'AST']:
-                                nombre_key = f"{jugador}_{target}"
-                                if key_auto == nombre_key:
-                                    odds_match = datos_auto
-                                    break
-
-                    # Valores por defecto: automáticos si hay, sino manuales
                     linea_default = float(avg)
                     odds_over_default = 1.87
                     odds_under_default = 1.87
 
-                    if odds_match:
-                        linea_default = float(odds_match.get('linea', avg))
-                        odds_over_default = float(odds_match.get('odds_over', 1.87))
-                        odds_under_default = float(odds_match.get('odds_under', 1.87))
-                        badge = " 📡"  # Indicador de odds automáticas
-                    else:
-                        badge = ""
-
-                    st.markdown(f"**{target}** — Modelo predice: `{pred_val}` | Promedio L10: `{avg}` | MAE: ±`{mae}`{badge}")
+                    st.markdown(f"**{target}** — Modelo predice: `{pred_val}` | Promedio L10: `{avg}` | MAE: ±`{mae}`")
 
                     col_l, col_o, col_u = st.columns(3)
                     with col_l:
