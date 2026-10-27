@@ -3,7 +3,10 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/);
 versiones según [SemVer](https://semver.org/lang/es/).
 
-## [Sin publicar]
+## [0.3.0] · 2026-10-27
+
+Despliegue con acceso privado, mejoras de uso del dashboard y repositorio
+listo para publicarse.
 
 ### Añadido
 
@@ -72,4 +75,5 @@ recalibra el modelo y rediseña el dashboard.
 - El All-Star Game contaba como partido de temporada regular.
 - `requirements.txt` pedía el backport `pathlib`, que puede romper la instalación.
 
-[0.2.0]: https://github.com/SantiagoRicaurte06/nba-predictor-pro/releases/tag/v0.2.0
+[0.3.0]: https://github.com/SantiagoRicaurte06/N.B.A_Predictor/releases/tag/v0.3.0
+[0.2.0]: https://github.com/SantiagoRicaurte06/N.B.A_Predictor/releases/tag/v0.2.0

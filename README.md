@@ -6,7 +6,7 @@
 ![XGBoost](https://img.shields.io/badge/modelo-XGBoost-2F6FDB)
 [![Licencia MIT](https://img.shields.io/badge/licencia-MIT-green)](LICENSE)
 
-**Versión 0.2.0** · [Registro de cambios](CHANGELOG.md)
+**Versión 0.3.0** · [Registro de cambios](CHANGELOG.md)
 
 > *In English:* a Streamlit app that predicts NBA player points with an XGBoost
 > model trained on five seasons of ESPN box scores, turns them into calibrated
