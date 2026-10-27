@@ -141,7 +141,8 @@ def construir_tablas(temporadas: list[str]) -> tuple[pd.DataFrame, pd.DataFrame]
                 spread = lineas.get("spread_local")
                 fila["spread_equipo"] = (np.nan if spread is None
                                          else (spread if fila["local"] else -spread))
-                fila["total_linea"] = lineas.get("total", np.nan)
+                total = lineas.get("total")
+                fila["total_linea"] = np.nan if total is None else float(total)
             jugadores.extend(j)
             equipos.extend(e)
 
