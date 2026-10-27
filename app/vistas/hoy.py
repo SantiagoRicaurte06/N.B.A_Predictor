@@ -7,7 +7,8 @@ import pandas as pd
 import streamlit as st
 
 from app.comun import MODO, bankroll, contexto, dinero, fecha_es
-from nba_predictor.apuestas.stakes import PARAMS, analizar_pick_prop, guardar_picks_del_dia
+from nba_predictor.apuestas.stakes import (MIN_EDGE, MIN_PROB, PARAMS, analizar_pick_prop, calcular_edge,
+                                          guardar_picks_del_dia)
 from nba_predictor.datos import espn
 from nba_predictor.datos.hoy import TEMPORADAS_HISTORICAS, datos_del_dia
 from nba_predictor.modelo import configuracion as cfg
@@ -84,13 +85,17 @@ def _partidos(datos: dict) -> None:
         filas.append({
             "Partido": f"{p['visitante']} @ {p['local']}",
             "Hora (ET)": pd.Timestamp(p["fecha"]).tz_convert("America/New_York").strftime("%H:%M"),
-            "Spread local": loc["spread_equipo"],
-            "Total": loc["total_linea"],
+            "Spread local": "—" if pd.isna(loc["spread_equipo"]) else f"{loc['spread_equipo']:+.1f}",
+            "Total": "—" if pd.isna(loc["total_linea"]) else f"{loc['total_linea']:.1f}",
             "Bajas": ", ".join(f"{b.jugador} ({b.equipo})" for b in bajas.itertuples()) or "—",
         })
     st.dataframe(pd.DataFrame(filas), hide_index=True, width="stretch",
-                 column_config={"Spread local": st.column_config.NumberColumn(format="%+.1f"),
-                                "Total": st.column_config.NumberColumn(format="%.1f")})
+                 column_config={"Spread local": st.column_config.TextColumn(alignment="right"),
+                                "Total": st.column_config.TextColumn(alignment="right"),
+                                "Bajas": st.column_config.TextColumn(width="large")})
+    if any(f["Total"] == "—" for f in filas):
+        st.caption("— : la casa aún no publica la línea de ese partido. El modelo predice igual; "
+                   "vuelve a cargar el día cerca del inicio para incluirla.")
 
 
 def _editor(tabla: pd.DataFrame) -> pd.DataFrame:
@@ -123,6 +128,21 @@ def _editor(tabla: pd.DataFrame) -> pd.DataFrame:
     )
 
 
+def _picks(n: int) -> str:
+    return f"{n} pick" if n == 1 else f"{n} picks"
+
+
+def _decision(pick: dict | None, prob: float, edge: float) -> str:
+    """Por qué se apuesta o no una línea, en pocas palabras."""
+    if pick:
+        return "Apostar"
+    if prob < MIN_PROB:
+        return f"No: prob. < {100 * MIN_PROB:.0f} %"
+    if edge < MIN_EDGE:
+        return "No: sin edge a esa cuota"
+    return "No: predicción fuera de rango"
+
+
 def _evaluar(editadas: pd.DataFrame, tabla: pd.DataFrame, modelo, bankroll_actual: float) -> pd.DataFrame:
     con_linea = editadas.dropna(subset=["Línea"])
     if con_linea.empty:
@@ -138,12 +158,13 @@ def _evaluar(editadas: pd.DataFrame, tabla: pd.DataFrame, modelo, bankroll_actua
                 "es_gtd": bool(j.get("es_duda", False)), "confianza": "MEDIA"}
         pick = analizar_pick_prop(pred, linea, c_over, c_under, bankroll_actual, p_over)
         lado = "OVER" if p_over >= 0.5 else "UNDER"
+        prob = max(p_over, 1 - p_over)
+        edge = calcular_edge(prob, c_over if lado == "OVER" else c_under)
         filas.append({
             "athlete_id": f["athlete_id"], "Jugador": j["jugador"], "Línea": linea,
-            "Predicción": j["prediccion"], "Lado": lado,
-            "Probabilidad": max(p_over, 1 - p_over),
-            "Edge": pick["edge_pct"] / 100 if pick else np.nan,
+            "Predicción": j["prediccion"], "Lado": lado, "Probabilidad": prob, "Edge": 100 * edge,
             "Stake": pick["stake_usd"] if pick else 0.0,
+            "Decisión": _decision(pick, prob, edge),
             "Pick": pick is not None, "_pick": pick, "_p_over": p_over,
             "_equipo": j["equipo"], "_rival": j["rival"],
             "_cuota_over": c_over, "_cuota_under": c_under, "_sigma": float(j["sigma"]),
@@ -175,22 +196,24 @@ def mostrar() -> None:
 
     st.subheader("Evaluación")
     st.dataframe(
-        evaluadas[["Jugador", "Línea", "Predicción", "Lado", "Probabilidad", "Edge", "Stake", "Pick"]],
+        evaluadas[["Jugador", "Línea", "Predicción", "Lado", "Probabilidad", "Edge", "Stake", "Decisión"]],
         hide_index=True, width="stretch",
         column_config={
             "Línea": st.column_config.NumberColumn(format="%.1f"),
             "Predicción": st.column_config.NumberColumn(format="%.1f"),
             "Probabilidad": st.column_config.ProgressColumn(format="%.2f", min_value=0.5, max_value=1.0),
-            "Edge": st.column_config.NumberColumn(format="percent"),
+            "Edge": st.column_config.NumberColumn(format="%+.1f %%",
+                                                  help="Ganancia esperada por unidad apostada a esa cuota"),
             "Stake": st.column_config.NumberColumn(format="%.2f USD"),
-            "Pick": st.column_config.CheckboxColumn("Apostar"),
+            "Decisión": st.column_config.TextColumn(width="medium"),
         },
     )
     picks = [p for p in evaluadas["_pick"] if p]
     col1, col2 = st.columns([3, 1])
-    col1.caption(f"{len(picks)} picks · {dinero(sum(p['stake_usd'] for p in picks))} en juego · "
+    n_picks = _picks(len(picks))
+    col1.caption(f"{n_picks} · {dinero(sum(p['stake_usd'] for p in picks))} en juego · "
                  f"bankroll {dinero(bk)} · modo {MODO}")
-    if col2.button(f"Registrar {len(picks)} picks", type="primary", disabled=not picks,
+    if col2.button(f"Registrar {n_picks}", type="primary", disabled=not picks,
                    icon=":material/save:", width="stretch"):
         _registrar(evaluadas, picks)
 
@@ -208,4 +231,4 @@ def _registrar(evaluadas: pd.DataFrame, picks: list[dict]) -> None:
         "cuota_under": f["_cuota_under"], "prediccion": f["Predicción"],
         "prob_over": f["_p_over"], "version_modelo": cfg.VERSION,
     } for f in evaluadas.to_dict("records")])
-    st.toast(f"{len(picks)} picks registrados en papel", icon=":material/check_circle:")
+    st.toast(f"Guardado en papel: {_picks(len(picks))}", icon=":material/check_circle:")
