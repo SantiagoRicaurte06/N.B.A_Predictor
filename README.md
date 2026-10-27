@@ -124,6 +124,14 @@ python scripts/recalibrar.py
 pytest
 ```
 
+El dashboard exige login. En local, configura `.streamlit/secrets.toml` a partir
+de `.streamlit/secrets.toml.example` o arráncalo con `NBA_SIN_LOGIN=1`.
+
+## Despliegue
+
+En un VPS con Docker Compose, Caddy para HTTPS y login con Google. Por qué no
+Vercel, Firebase ni Supabase, y los pasos: [docs/DESPLIEGUE.md](docs/DESPLIEGUE.md).
+
 ---
 
 ## Estructura
@@ -135,7 +143,8 @@ nba_predictor/
   apuestas/      Kelly, edge y tamaño de cada apuesta
   seguimiento/   ledger de picks, métricas, gate y diagnóstico
   backtest/      evaluación por temporadas contra líneas sintéticas
-app/             dashboard Streamlit (una vista por pestaña)
+app/             dashboard Streamlit (una vista por pestaña) y control de acceso
+deploy/          Caddyfile y script de actualización del VPS
 scripts/         recalibración
 tests/           pytest
 docs/            PRD, TRD, ADR, DATA_SPEC, PLAN, recalibración e históricos
@@ -174,6 +183,7 @@ git config core.hooksPath .githooks
 | Documento | Contenido |
 |---|---|
 | [CHANGELOG.md](CHANGELOG.md) | Cambios de cada versión |
+| [DESPLIEGUE.md](docs/DESPLIEGUE.md) | Hosting, login y seguridad en producción |
 | [RECALIBRACION.md](docs/RECALIBRACION.md) | Datos de ESPN, factores, validación y holdout del modelo v2 |
 | [PRD.md](docs/PRD.md) · [TRD.md](docs/TRD.md) | Producto y arquitectura técnica |
 | [ADR.md](docs/ADR.md) | Decisiones de arquitectura |

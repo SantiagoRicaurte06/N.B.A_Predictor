@@ -3,6 +3,15 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/);
 versiones según [SemVer](https://semver.org/lang/es/).
 
+## [Sin publicar]
+
+### Añadido
+
+- Login con Google (`st.login`) y lista de correos autorizados; sin
+  configuración el dashboard no arranca (`app/acceso.py`).
+- Despliegue en VPS: `Dockerfile`, `docker-compose.yml` con Caddy para HTTPS y
+  guía en `docs/DESPLIEGUE.md` (ADR-009).
+
 ## [0.2.0] · 2026-10-20
 
 Primera versión etiquetada. Reorganiza el proyecto, migra los datos a ESPN,

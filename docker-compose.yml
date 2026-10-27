@@ -1,0 +1,32 @@
+# Producción en un VPS: Caddy (HTTPS automático) delante de Streamlit.
+# Streamlit no publica puertos: solo se llega a él a través de Caddy.
+#   DOMINIO=nba.tu-dominio.com docker compose up -d --build
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    volumes:
+      - ./cache:/app/cache
+      - ./.streamlit/secrets.toml:/app/.streamlit/secrets.toml:ro
+    expose:
+      - "8501"
+
+  caddy:
+    image: caddy:2.8
+    restart: unless-stopped
+    depends_on:
+      - app
+    environment:
+      DOMINIO: ${DOMINIO:?define DOMINIO, p. ej. nba.tu-dominio.com}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:

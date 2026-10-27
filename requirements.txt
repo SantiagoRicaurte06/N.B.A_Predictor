@@ -4,5 +4,6 @@ numpy
 scikit-learn
 scipy
 streamlit>=1.60
+authlib>=1.3.2
 requests
 pyarrow
