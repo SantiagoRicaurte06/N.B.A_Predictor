@@ -104,10 +104,11 @@ def filas_de_hoy(plantillas: dict[str, list[dict]], partidos: list[dict], report
             base = {"temporada": temporada, "evento": str(p["id"]), "fecha": pd.Timestamp(hoy),
                     "fecha_utc": fecha_utc, "tipo": p.get("tipo", 2), "neutral": False,
                     "equipo": equipo, "rival": rival, "local": local}
-            spread = l.get("spread_local")
+            # ESPN publica las líneas unas horas antes del partido: hasta entonces llegan en None.
+            spread, total = l.get("spread_local"), l.get("total")
             filas_e.append({**base, "pts": np.nan, "pts_rival": np.nan, "posesiones": np.nan,
                             "spread_equipo": np.nan if spread is None else (spread if local else -spread),
-                            "total_linea": l.get("total", np.nan)})
+                            "total_linea": np.nan if total is None else float(total)})
             for j in plantillas.get(equipo, []):
                 # El reporte general manda; si no lo trae, el estado de la plantilla.
                 st = estado.get(j["athlete_id"]) or j.get("estado", "")

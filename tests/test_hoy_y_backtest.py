@@ -44,6 +44,16 @@ def test_filas_de_hoy_marcan_las_bajas_y_se_pueden_predecir():
     assert hoy_df[hoy_df["equipo"] == "BOS"]["estrella_fuera"].eq(1).all()
 
 
+def test_filas_de_hoy_sin_lineas_publicadas_quedan_numericas():
+    # Antes de que las casas publiquen, ESPN devuelve spread y total en None.
+    partidos = [{"id": "1", "fecha": "2026-10-27T23:30Z", "local": "BOS", "visitante": "NY", "tipo": 2}]
+    lineas = {"1": {"spread_local": None, "total": None, "n_casas": 0}}
+    _, eh = filas_de_hoy({}, partidos, pd.DataFrame(), lineas, date(2026, 10, 27))
+    assert pd.api.types.is_float_dtype(eh["total_linea"])
+    assert pd.api.types.is_float_dtype(eh["spread_equipo"])
+    assert eh["total_linea"].isna().all()
+
+
 def test_apuestas_eligen_el_lado_probable_y_cuentan_bien():
     pred = pd.DataFrame({
         "PTS": [30, 10, 20, 25], "semana": ["s1"] * 4,
