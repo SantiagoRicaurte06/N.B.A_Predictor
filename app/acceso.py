@@ -48,7 +48,7 @@ def exigir_login() -> None:
         with centro:
             st.title("NBA Predictor")
             st.caption("Acceso privado. Inicia sesión con una cuenta autorizada.")
-            st.button("Iniciar sesión con Google", icon=":material/login:",
+            st.button("Iniciar sesión con Google", icon=":material/login:", type="primary",
                       on_click=st.login, width="stretch")
         st.stop()
 
