@@ -16,12 +16,14 @@ import streamlit as st
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 from app import comun                                          # noqa: E402
+from app.acceso import exigir_login                            # noqa: E402
 from app.vistas import hoy, modelo, rendimiento, resultados    # noqa: E402
 from nba_predictor.apuestas.stakes import PARAMS               # noqa: E402
 from nba_predictor.modelo import configuracion as cfg          # noqa: E402
 
 st.set_page_config(page_title="NBA Predictor", page_icon=":material/sports_basketball:",
                    layout="wide", initial_sidebar_state="collapsed")
+exigir_login()
 comun.iniciar_estado()
 
 with st.sidebar:
@@ -38,6 +40,10 @@ with st.sidebar:
     st.caption(f"Modo {comun.MODO} · sin dinero real")
     st.caption(f"Modelo {cfg.VERSION} · Kelly {PARAMS['kelly_fraction'] * 100:.0f} % · "
                f"prob. mínima {PARAMS['min_prob'] * 100:.0f} %")
+    if st.user.get("is_logged_in"):
+        st.divider()
+        st.caption(st.user.get("email", ""))
+        st.button("Cerrar sesión", icon=":material/logout:", on_click=st.logout, width="stretch")
 
 cab, fecha = st.columns([4, 1], vertical_alignment="bottom")
 cab.title("NBA Predictor")

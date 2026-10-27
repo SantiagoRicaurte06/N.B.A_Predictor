@@ -1,0 +1,15 @@
+.git
+.github
+.githooks
+.claude
+.agents
+cache
+docs
+tests
+**/__pycache__
+*.egg-info
+.venv
+venv
+.env
+.env.*
+.streamlit/secrets.toml

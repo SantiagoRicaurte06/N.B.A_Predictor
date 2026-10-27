@@ -15,6 +15,7 @@ Cada registro documenta una decisión de arquitectura tomada, su contexto y sus 
 | ADR-006 | Archivos planos locales, sin base de datos | Aceptado |
 | ADR-007 | Bankroll derivado del registro, no mutable | Aceptado |
 | ADR-008 | El modelo emite incertidumbre, no solo el valor | Aceptado |
+| ADR-009 | Despliegue en VPS con Docker y login OIDC | Aceptado |
 
 ---
 
@@ -152,3 +153,21 @@ Cada registro documenta una decisión de arquitectura tomada, su contexto y sus 
 - (−) Exige elegir un método de estimación de incertidumbre (regresión cuantílica vs. sigma empírico) — queda como pregunta técnica abierta en el TRD.
 
 **Alternativas consideradas:** seguir derivando sigma del MAE (rechazada: inconsistente y subestima la varianza real).
+
+---
+
+## ADR-009 — Despliegue en VPS con Docker y login OIDC
+
+**Estado:** Aceptado
+
+**Contexto:** El dashboard debe estar disponible en internet solo para su dueño. Es una app Streamlit (proceso largo con WebSockets) que persiste en archivos planos (ADR-006) y entrena el modelo del día en el servidor.
+
+**Decisión:** Desplegar en un **VPS** con Docker Compose: Streamlit detrás de **Caddy** (HTTPS automático) y acceso con **`st.login` (OpenID Connect con Google)** más una lista de correos autorizados. Sin la configuración de login el dashboard no arranca.
+
+**Consecuencias:**
+- (+) `cache/` sigue siendo un directorio: sin migrar datos.
+- (+) Contraseñas y 2FA los gestiona Google; la app no guarda credenciales.
+- (+) Coste bajo y fijo (4–6 USD/mes).
+- (−) El servidor (actualizaciones, respaldos, cortafuegos) se mantiene a mano.
+
+**Alternativas consideradas:** Vercel y Firebase Hosting (rechazadas: serverless o estático, sin disco persistente ni procesos largos); Supabase (no ejecuta Python; solo útil si el ledger pasa a Postgres); Streamlit Community Cloud (disco efímero, se perdería el ledger); usuario y contraseña propios con hash (rechazada: más superficie de ataque que delegar en un proveedor OIDC).
