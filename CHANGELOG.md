@@ -11,6 +11,17 @@ versiones según [SemVer](https://semver.org/lang/es/).
   configuración el dashboard no arranca (`app/acceso.py`).
 - Despliegue en VPS: `Dockerfile`, `docker-compose.yml` con Caddy para HTTPS y
   guía en `docs/DESPLIEGUE.md` (ADR-009).
+- La pestaña Hoy explica el flujo en tres pasos, avisa si falta el histórico de
+  ESPN y muestra un error claro si ESPN no responde.
+- La evaluación de líneas muestra siempre el edge y por qué se apuesta o no cada
+  una.
+- Licencia MIT, capturas con datos reales y README para el repositorio público.
+
+### Corregido
+
+- Cargar el día antes de que las casas publiquen sus líneas fallaba: el total
+  llegaba en `None` y el modelo rechazaba la columna.
+- Con cero picks resueltos, el gate marcaba el ROI como cumplido.
 
 ## [0.2.0] · 2026-10-20
 

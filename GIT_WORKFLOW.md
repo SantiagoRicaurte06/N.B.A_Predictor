@@ -252,8 +252,8 @@ GitHub responde `403 Upgrade to GitHub Pro or make this repository public to ena
 |---|---|
 | Hooks locales instalados | ☑ versionados en `.githooks/`; cada clon debe correr `git config core.hooksPath .githooks` |
 | CI de commits y pruebas | ☑ `commits.yml` y `pruebas.yml` (corre cada `test_*.py` como script) |
-| Rama por defecto `develop` | ☐ pendiente: falta crear `develop` en GitHub y ponerla por defecto |
+| Rama por defecto `develop` | ☑ `develop` existe en GitHub · ☐ falta ponerla por defecto (Settings → General) |
 | Borrado de ramas al integrar | ☐ pendiente |
-| Protección de `main` y `develop` | ☐ forzada · ☑ acuerdo de equipo |
+| Protección de `main` y `develop` | ☐ forzada · ☑ acuerdo de equipo. Con el repositorio público ya es gratis: activarla en Settings → Rules |
 
-_Actualizado al configurar el repositorio (2026-10-20)._
+_Actualizado al preparar el repositorio público (2026-10-27)._
