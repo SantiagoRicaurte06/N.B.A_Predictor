@@ -1,6 +1,18 @@
 # NBA Predictor
 
-**Versión 0.2.0** · [Registro de cambios](CHANGELOG.md)
+[![Pruebas](https://github.com/SantiagoRicaurte06/N.B.A_Predictor/actions/workflows/pruebas.yml/badge.svg?branch=main)](https://github.com/SantiagoRicaurte06/N.B.A_Predictor/actions/workflows/pruebas.yml)
+![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-3776AB?logo=python&logoColor=white)
+![Streamlit](https://img.shields.io/badge/streamlit-1.60%2B-FF4B4B?logo=streamlit&logoColor=white)
+![XGBoost](https://img.shields.io/badge/modelo-XGBoost-2F6FDB)
+[![Licencia MIT](https://img.shields.io/badge/licencia-MIT-green)](LICENSE)
+
+**Versión 0.3.0** · [Registro de cambios](CHANGELOG.md)
+
+> *In English:* a Streamlit app that predicts NBA player points with an XGBoost
+> model trained on five seasons of ESPN box scores, turns them into calibrated
+> over/under probabilities, and paper-trades them against real sportsbook lines
+> with fractional Kelly staking. No real money until a statistical gate proves an
+> edge. Deployed with Docker, Caddy (HTTPS) and Google sign-in.
 
 Predicción de los **puntos** de jugadores NBA y gestión de apuestas en papel contra
 las líneas de Betano, con una regla central: **no se arriesga dinero real hasta
@@ -44,11 +56,34 @@ flowchart LR
 5. **Modelo:** factores en uso, validación, holdout y, cuando haya 30 o más, el
    rendimiento contra tus líneas reales.
 
-![Pestaña Hoy: partidos, bajas y predicciones con las líneas de Betano](docs/img/hoy.png)
+## Capturas
 
-![Pestaña Modelo: factores en uso y resultados de validación](docs/img/modelo.png)
+Tomadas con datos reales de ESPN del 27 de octubre de 2026. Las líneas de
+Betano son de ejemplo.
 
-El tema claro u oscuro se elige en ⋮ → Settings.
+![Pestaña Hoy: partidos de la noche, bajas y predicción de puntos de cada jugador](docs/img/hoy.png)
+
+![Evaluación: probabilidad calibrada, edge y por qué se apuesta o no cada línea](docs/img/evaluacion.png)
+
+| Rendimiento y gate papel → dinero real | Modelo: factores y validación |
+|---|---|
+| ![Pestaña Rendimiento](docs/img/rendimiento.png) | ![Pestaña Modelo](docs/img/modelo.png) |
+| **Acceso privado con Google** | **Tema oscuro** (⋮ → Settings) |
+| ![Pantalla de inicio de sesión](docs/img/login.png) | ![Pestaña Hoy en tema oscuro](docs/img/hoy-oscuro.png) |
+
+---
+
+## Stack
+
+| Capa | Tecnología |
+|---|---|
+| Datos | API pública de ESPN (box scores, lesiones, plantillas, líneas), cache en JSON comprimido y Parquet |
+| Modelo | XGBoost, pandas, NumPy, scikit-learn, SciPy; calibración de probabilidades y backtest por temporadas |
+| Apuestas | Kelly fraccionado, edge, intervalo de Wilson para el gate |
+| Interfaz | Streamlit con tema claro y oscuro |
+| Seguridad | Login OIDC con Google (`st.login`) y lista de correos autorizados |
+| Despliegue | Docker, Docker Compose, Caddy (HTTPS automático), VPS |
+| Calidad | pytest, GitHub Actions, Conventional Commits con hooks |
 
 ---
 
@@ -124,6 +159,15 @@ python scripts/recalibrar.py
 pytest
 ```
 
+El dashboard exige login. En local, configura `.streamlit/secrets.toml` a partir
+de `.streamlit/secrets.toml.example` o arráncalo con `NBA_SIN_LOGIN=1`.
+
+## Despliegue
+
+En un VPS con Docker Compose, Caddy para HTTPS y login con Google; gratis con
+Oracle Cloud Always Free. Por qué no
+Vercel, Firebase ni Supabase, y los pasos: [docs/DESPLIEGUE.md](docs/DESPLIEGUE.md).
+
 ---
 
 ## Estructura
@@ -135,7 +179,8 @@ nba_predictor/
   apuestas/      Kelly, edge y tamaño de cada apuesta
   seguimiento/   ledger de picks, métricas, gate y diagnóstico
   backtest/      evaluación por temporadas contra líneas sintéticas
-app/             dashboard Streamlit (una vista por pestaña)
+app/             dashboard Streamlit (una vista por pestaña) y control de acceso
+deploy/          Caddyfile y script de actualización del VPS
 scripts/         recalibración
 tests/           pytest
 docs/            PRD, TRD, ADR, DATA_SPEC, PLAN, recalibración e históricos
@@ -174,6 +219,7 @@ git config core.hooksPath .githooks
 | Documento | Contenido |
 |---|---|
 | [CHANGELOG.md](CHANGELOG.md) | Cambios de cada versión |
+| [DESPLIEGUE.md](docs/DESPLIEGUE.md) | Hosting, login y seguridad en producción |
 | [RECALIBRACION.md](docs/RECALIBRACION.md) | Datos de ESPN, factores, validación y holdout del modelo v2 |
 | [PRD.md](docs/PRD.md) · [TRD.md](docs/TRD.md) | Producto y arquitectura técnica |
 | [ADR.md](docs/ADR.md) | Decisiones de arquitectura |
@@ -184,4 +230,9 @@ git config core.hooksPath .githooks
 
 ---
 
-<sub>Proyecto personal de aprendizaje. Apostar implica riesgo; nada aquí garantiza rentabilidad.</sub>
+## Licencia
+
+[MIT](LICENSE) © Santiago Ricaurte
+
+<sub>Proyecto personal de aprendizaje. Apostar implica riesgo; nada aquí garantiza rentabilidad.
+No está afiliado a la NBA, ESPN ni Betano.</sub>

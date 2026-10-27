@@ -31,6 +31,9 @@ def _curva_bankroll(serie: pd.DataFrame) -> None:
 
 
 def _calibracion(df: pd.DataFrame) -> None:
+    if df.empty:
+        st.caption("La calibración en vivo aparece con 20 picks resueltos.")
+        return
     jugados = df[df["resultado"].isin(["W", "L"])].dropna(subset=["prob_modelo"]).copy()
     if len(jugados) < 20:
         st.caption("La calibración en vivo aparece con 20 picks resueltos.")
@@ -58,12 +61,15 @@ def _gate() -> None:
     st.progress(g["progreso_picks"],
                 text=f"Muestra: {c['picks']['actual']} de {c['picks']['meta']} picks resueltos")
     ic = c.get("ic_supera_break_even", {})
+    # Sin picks resueltos no hay acierto ni ROI que medir: se muestran vacíos, no como 0 % cumplido.
+    hay = c["picks"]["actual"] > 0
     filas = [
         ("Muestra", f"{c['picks']['actual']}", f"≥ {c['picks']['meta']}", c["picks"]["ok"]),
-        ("Acierto", pct(c["win_rate"]["actual"]), f"≥ {c['win_rate']['meta']} %", c["win_rate"]["ok"]),
-        ("ROI", pct(c["roi"]["actual"]), f"≥ {c['roi']['meta']} %", c["roi"]["ok"]),
-        ("IC 95 % (Wilson), límite inferior", pct(ic.get("actual")),
-         f"> {g['break_even_pct']} %", ic.get("ok", False)),
+        ("Acierto", pct(c["win_rate"]["actual"] if hay else None), f"≥ {c['win_rate']['meta']} %",
+         hay and c["win_rate"]["ok"]),
+        ("ROI", pct(c["roi"]["actual"] if hay else None), f"≥ {c['roi']['meta']} %", hay and c["roi"]["ok"]),
+        ("IC 95 % (Wilson), límite inferior", pct(ic.get("actual") if hay else None),
+         f"> {g['break_even_pct']} %", hay and ic.get("ok", False)),
     ]
     st.dataframe(pd.DataFrame(filas, columns=["Criterio", "Actual", "Meta", "Cumple"]),
                  hide_index=True, width="stretch",
@@ -108,8 +114,7 @@ def mostrar() -> None:
         else:
             _curva_bankroll(serie)
         st.subheader("Calibración en vivo")
-        if not df.empty:
-            _calibracion(df)
+        _calibracion(df)
     with der:
         st.subheader("Gate papel → dinero real")
         _gate()
