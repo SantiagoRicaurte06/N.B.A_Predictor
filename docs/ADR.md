@@ -167,7 +167,7 @@ Cada registro documenta una decisión de arquitectura tomada, su contexto y sus 
 **Consecuencias:**
 - (+) `cache/` sigue siendo un directorio: sin migrar datos.
 - (+) Contraseñas y 2FA los gestiona Google; la app no guarda credenciales.
-- (+) Coste bajo y fijo (4–6 USD/mes).
+- (+) Coste cero con Oracle Cloud Always Free, o 4–6 USD/mes en un VPS de pago.
 - (−) El servidor (actualizaciones, respaldos, cortafuegos) se mantiene a mano.
 
 **Alternativas consideradas:** Vercel y Firebase Hosting (rechazadas: serverless o estático, sin disco persistente ni procesos largos); Supabase (no ejecuta Python; solo útil si el ledger pasa a Postgres); Streamlit Community Cloud (disco efímero, se perdería el ledger); usuario y contraseña propios con hash (rechazada: más superficie de ataque que delegar en un proveedor OIDC).

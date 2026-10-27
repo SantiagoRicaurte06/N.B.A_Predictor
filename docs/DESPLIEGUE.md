@@ -14,11 +14,19 @@ que guarda todo en **archivos** dentro de `cache/` (ADR-006): histórico de ESPN
 | **Firebase** | ✗ | Hosting es estático; App Hosting es para Next.js/Angular. Habría que montar Cloud Run aparte y mover los datos a otro sitio. |
 | **Supabase** | ✗ como host | Es base de datos + auth + storage; no ejecuta apps Python. Solo tendría sentido migrando el ledger a Postgres, que hoy no hace falta. |
 | Streamlit Community Cloud | ✗ | Gratis, pero el disco se borra en cada reinicio: se perdería el ledger. |
-| **VPS** (Hetzner, DigitalOcean, Contabo…) | ✓ | Disco persistente, proceso largo y WebSockets. `cache/` se queda tal cual. 4–6 USD/mes. |
+| **VPS gratis: Oracle Cloud Always Free** | ✓ | Hasta 4 núcleos ARM y 24 GB de RAM sin coste. Pide tarjeta al registrarse (no cobra) y a veces no hay capacidad ARM en la región. |
+| **VPS de pago** (Hetzner, DigitalOcean…) | ✓ | Igual que el anterior, sin esperas de capacidad. 4–6 USD/mes. |
 
 **Elegido: VPS con Docker Compose**, Caddy delante para HTTPS automático y login
-de Google con `st.login`. Un VPS de 2 vCPU y 4 GB (p. ej. Hetzner CX22) basta
-para entrenar el modelo del día.
+de Google con `st.login`. Para que sea gratis, usa una instancia **Ampere A1**
+(Ubuntu 24.04, 2 OCPU y 12 GB bastan) de Oracle Cloud Always Free; si no hay
+capacidad, un VPS de 2 vCPU y 4 GB de pago (p. ej. Hetzner CX22) también sirve.
+Los pasos de abajo son los mismos en los dos.
+
+En Oracle, además del `ufw` del servidor, abre los puertos 80 y 443 en la
+*Security List* de la VCN (Networking → Virtual Cloud Networks → Security Lists →
+Ingress Rules) y, si la imagen trae reglas de `iptables` propias, permite esos
+puertos también ahí.
 
 ## Arquitectura
 
