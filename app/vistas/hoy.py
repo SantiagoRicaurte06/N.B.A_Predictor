@@ -8,7 +8,8 @@ import streamlit as st
 
 from app.comun import MODO, bankroll, contexto, dinero, fecha_es
 from nba_predictor.apuestas.stakes import PARAMS, analizar_pick_prop, guardar_picks_del_dia
-from nba_predictor.datos.hoy import datos_del_dia
+from nba_predictor.datos import espn
+from nba_predictor.datos.hoy import TEMPORADAS_HISTORICAS, datos_del_dia
 from nba_predictor.modelo import configuracion as cfg
 from nba_predictor.modelo import diario
 from nba_predictor.seguimiento import lineas_reales
@@ -16,14 +17,58 @@ from nba_predictor.seguimiento import lineas_reales
 CUOTA_DEFECTO = 1.87
 
 
-def _cargar():
+PASOS = [
+    (":material/download:", "1 · Carga el día",
+     "Partidos, reporte de lesiones, plantillas y líneas de partido desde ESPN. "
+     "El modelo predice los puntos de cada jugador de rotación."),
+    (":material/edit_note:", "2 · Escribe las líneas",
+     "Copia la línea de Betano de los jugadores que te interesan. El modelo da la "
+     "probabilidad calibrada de over o under y el stake Kelly."),
+    (":material/fact_check:", "3 · Resuelve mañana",
+     "En Resultados, un botón resuelve los picks con los box scores de ESPN y "
+     "actualiza el bankroll en papel."),
+]
+
+
+def _faltan_temporadas() -> list[str]:
+    return [t for t in TEMPORADAS_HISTORICAS
+            if not any((espn.CACHE_ESPN / t / "partidos").glob("*.json.gz"))]
+
+
+def _cargar() -> bool:
     with st.status("Preparando el día…", expanded=True) as estado:
-        estado.write("Partidos, lesiones y líneas de ESPN")
-        datos = datos_del_dia()
-        estado.write("Modelo de puntos (se entrena una vez al día)")
-        tabla, modelo = diario.predecir(datos)
+        try:
+            estado.write("Partidos, lesiones y líneas de ESPN")
+            datos = datos_del_dia()
+            estado.write("Modelo de puntos (se entrena una vez al día, tarda un minuto)")
+            tabla, modelo = diario.predecir(datos)
+        except Exception as e:  # red caída o ESPN sin responder: el usuario puede reintentar
+            estado.update(label="No se pudo preparar el día", state="error")
+            st.error(f"ESPN no respondió o los datos llegaron incompletos ({type(e).__name__}). "
+                     "Vuelve a intentarlo en unos minutos.", icon=":material/cloud_off:")
+            return False
         st.session_state.update(datos=datos, tabla=tabla, modelo=modelo)
         estado.update(label=f"{len(tabla)} jugadores listos", state="complete")
+    return True
+
+
+def _inicio() -> None:
+    st.subheader("Partidos de hoy")
+    columnas = st.columns(len(PASOS))
+    for col, (icono, titulo, texto) in zip(columnas, PASOS):
+        with col.container(border=True, height="stretch"):
+            st.markdown(f"**{icono} {titulo}**")
+            st.caption(texto)
+
+    faltan = _faltan_temporadas()
+    if faltan:
+        st.warning("Falta el histórico de ESPN de " + ", ".join(faltan) + ". Descárgalo una vez "
+                   "con `python -m nba_predictor.datos.espn` (unos minutos) y recarga la página.",
+                   icon=":material/database:")
+    if st.button("Cargar partidos y predicciones", type="primary", icon=":material/download:",
+                 disabled=bool(faltan)):
+        if _cargar():
+            st.rerun()
 
 
 def _partidos(datos: dict) -> None:
@@ -109,12 +154,7 @@ def _evaluar(editadas: pd.DataFrame, tabla: pd.DataFrame, modelo, bankroll_actua
 def mostrar() -> None:
     datos, tabla, modelo = (st.session_state[k] for k in ("datos", "tabla", "modelo"))
     if datos is None:
-        st.subheader("Partidos de hoy")
-        st.write("Descarga los partidos, el reporte de lesiones y las líneas de partido, "
-                 "y calcula la predicción de puntos de cada jugador de rotación.")
-        if st.button("Cargar partidos y predicciones", type="primary", icon=":material/download:"):
-            _cargar()
-            st.rerun()
+        _inicio()
         return
 
     st.subheader(f"Partidos · {fecha_es(datos['hoy'])}")

@@ -50,7 +50,7 @@ cab.title("NBA Predictor")
 cab.caption("Puntos de jugadores · picks en papel contra las líneas de Betano")
 bk = comun.bankroll()
 variacion = bk["bankroll_actual"] - bk["bankroll_inicial"]
-fecha.metric(comun.fecha_es(datetime.now()), comun.dinero(bk["bankroll_actual"]),
+fecha.metric(f"Bankroll · {comun.fecha_es(datetime.now())}", comun.dinero(bk["bankroll_actual"]),
              delta=comun.dinero(variacion, signo=True) if abs(variacion) >= 0.005 else None)
 
 t_hoy, t_res, t_rend, t_mod = st.tabs(["Hoy", "Resultados", "Rendimiento", "Modelo"])
